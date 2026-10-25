@@ -1,0 +1,7 @@
+# Build output and local tooling state. Nothing under ~/.kube is ever here.
+/dist/
+/kcx
+*.test
+*.out
+coverage*
+.DS_Store

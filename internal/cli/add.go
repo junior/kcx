@@ -249,12 +249,6 @@ func (a *App) labGuard() error {
 	return fmt.Errorf("this machine is a lab node, and a permanent cluster's credentials do not belong on one: add it on a desktop instead; temp clusters are fine here (kcx temp create)")
 }
 
-// labNode says whether this machine is marked as a lab node. Until the
-// machine settings file exists, the KCX_LAB_NODE variable marks one.
-func (a *App) labNode() bool {
-	return a.getenv("KCX_LAB_NODE") == "1"
-}
-
 func (a *App) cmdRm(args []string) error {
 	if len(args) != 1 || args[0] == "" {
 		return usagef("kcx rm NAME")

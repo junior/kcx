@@ -106,21 +106,6 @@ func (a *App) use(ctx string) error {
 	return nil
 }
 
-func (a *App) cmdSwitch(name string) error {
-	if err := a.runGuard(); err != nil {
-		return err
-	}
-	ctx, err := a.resolve(name)
-	if err != nil {
-		return err
-	}
-	if err := a.use(ctx); err != nil {
-		return err
-	}
-	a.say("switched to %s", ctx)
-	return nil
-}
-
 func (a *App) cmdPrevious() error {
 	if err := a.runGuard(); err != nil {
 		return err

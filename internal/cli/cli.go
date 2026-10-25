@@ -9,8 +9,10 @@ import (
 
 	"strings"
 
+	"github.com/junior/kcx/internal/config"
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/internal/profile"
 )
 
 // version is stamped by the release build (-X github.com/junior/kcx/internal/cli.version=...).
@@ -39,6 +41,8 @@ type App struct {
 	stderr io.Writer
 	getenv layout.Getenv
 	lay    layout.Layout
+	cfg    *config.Settings // loaded on first use
+	set    *profile.Set     // loaded on first use
 }
 
 // Main runs kcx with args and returns the exit status.
@@ -69,9 +73,9 @@ func (a *App) run(args []string) error {
 	}
 	if a.getenv(EnvRO) != "" {
 		switch cmd {
-		case "", "ls", "list", "env", "-c", "current", "__complete", "-h", "--help", "help", "-v", "--version":
+		case "", "ls", "list", "env", "-c", "current", "ns", "__complete", "-h", "--help", "help", "-v", "--version":
 		default:
-			return fmt.Errorf("this is a READ-ONLY shell for %s: only kcx ls, env and -c work here; exit it first", a.getenv(EnvRO))
+			return fmt.Errorf("this is a READ-ONLY shell for %s: only kcx ls, env, -c and ns work here; exit it first", a.getenv(EnvRO))
 		}
 	}
 	switch cmd {
@@ -107,14 +111,19 @@ func (a *App) run(args []string) error {
 		return a.cmdMv(args[1:])
 	case "adopt":
 		return a.cmdAdopt(args[1:])
+	case "ns", "namespace":
+		return a.cmdNs(args[1:])
+	case "fetch":
+		return a.cmdFetch(args[1:])
+	case "profile", "profiles":
+		return a.cmdProfile(args[1:])
+	case "secret":
+		return a.cmdSecret(args[1:])
 	}
 	if strings.HasPrefix(cmd, "-") {
 		return usagef("unknown option %s", cmd)
 	}
-	if len(args) != 1 {
-		return usagef("kcx NAME switches; other commands: kcx -h")
-	}
-	return a.cmdSwitch(cmd)
+	return a.cmdSwitchArgs(args)
 }
 
 // cmdEnv prints the export line for shells other than zsh. A read-only shell's
@@ -164,8 +173,41 @@ func (a *App) cmdComplete(words []string) error {
 		for _, c := range ctxs {
 			fmt.Fprintln(a.stdout, c)
 		}
-		for _, w := range []string{"ls", "env", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
+		if set, err := a.profiles(); err == nil {
+			for _, n := range set.Names() {
+				if !containsString(ctxs, n) {
+					fmt.Fprintln(a.stdout, n)
+				}
+			}
+		}
+		for _, w := range []string{"ns", "fetch", "profile", "secret", "ls", "env", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
 			fmt.Fprintln(a.stdout, w)
+		}
+	case "ns", "namespace":
+		if len(words) == 1 {
+			for _, w := range []string{"-c", "-", "--force"} {
+				fmt.Fprintln(a.stdout, w)
+			}
+		}
+	case "fetch":
+		if set, err := a.profiles(); err == nil {
+			for _, n := range set.Names() {
+				fmt.Fprintln(a.stdout, n)
+			}
+		}
+		for _, w := range []string{"--all", "--missing", "--group", "--use", "-u"} {
+			fmt.Fprintln(a.stdout, w)
+		}
+	case "profile", "profiles":
+		if len(words) == 1 {
+			fmt.Fprintln(a.stdout, "ls")
+			fmt.Fprintln(a.stdout, "check")
+		}
+	case "secret":
+		if len(words) == 1 {
+			for _, w := range []string{"status", "refresh", "forget"} {
+				fmt.Fprintln(a.stdout, w)
+			}
 		}
 	case "rm", "remove", "mv", "rename":
 		if len(words) == 1 {
@@ -194,12 +236,32 @@ func shellQuote(s string) string {
 const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the tools to use them.
 
   kcx                         list the contexts (the picker comes in a later build)
-  kcx NAME                    switch to NAME: a cluster file, a context, or kind-NAME
+  kcx NAME [-u USER]          switch to NAME: a cluster file, a context, kind-NAME, or a
+                              profile cluster, fetched first when its file is missing or
+                              its credentials no longer work (--refresh: fetch regardless;
+                              --no-probe: do not check them)
   kcx -                       switch to the previous context
   kcx -c                      print the current context
   kcx ls [-q]                 every context: where its file lives and its server
                               (-q: names only)
+  kcx ns [NAME|-|-c]          switch the current context's namespace, go back, or print
+                              it; without an argument, list the cluster's namespaces
+      --force                 set it without asking the cluster whether it exists
   kcx env                     print the KUBECONFIG export line, for shells other than zsh
+
+Profiles, ~/.config/kcx/profiles/*.toml (KCX_PROFILES overrides): the clusters a
+machine may fetch, in groups, each through a provider command and a secret provider.
+kcx ships none; kcx profile check validates yours.
+  kcx fetch NAME...           fetch these clusters' kubeconfigs (a refresh when the file exists)
+  kcx fetch --all             every profile cluster that has a file, current context kept
+  kcx fetch --group G         every cluster of group G
+  kcx fetch --missing         every profile cluster without a file
+      -u USER                 the user, instead of the profile's template
+      --use                   switch afterwards (one cluster)
+  kcx profile ls              the clusters the profiles know, and which are fetched
+  kcx profile check           read the profiles and report mistakes
+  kcx secret status|refresh|forget [PROVIDER]
+                              talk to a secret provider; never prints a secret
 
 Permanent clusters, one file each in ~/.kube/configs:
   kcx add NAME FILE           import the kubeconfig in FILE as NAME
@@ -226,7 +288,6 @@ Examples:
   kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
   ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
 
-This is a development build of kcx 2; namespaces, profiles, fetch, the read-only
-shell, run and temp clusters land in the next builds. kcx 1.0, the bash script,
-keeps working beside it.
+This is a development build of kcx 2; the picker, the read-only shell, run and temp
+clusters land in the next builds. kcx 1.0, the bash script, keeps working beside it.
 `

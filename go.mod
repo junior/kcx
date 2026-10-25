@@ -2,7 +2,11 @@ module github.com/junior/kcx
 
 go 1.26.0
 
-require k8s.io/client-go v0.37.1
+require (
+	github.com/BurntSushi/toml v1.6.0
+	golang.org/x/term v0.45.0
+	k8s.io/client-go v0.37.1
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -18,7 +22,6 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

@@ -341,8 +341,9 @@ const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the 
   kcx init zsh|bash           the shell snippet: eval "$(kcx init zsh)" keeps KUBECONFIG
                               in step and installs completion
   kcx completion zsh|bash     the completion part alone
-  kcx doctor                  check the layout, the files, the settings, the profiles
-                              and the programs kcx relies on
+  kcx doctor [--fix]          check the layout, the files, the settings, the profiles
+                              and the programs kcx relies on; --fix first repairs the
+                              modes and a current context a cluster file sets of its own
 
 Profiles, ~/.config/kcx/profiles/*.toml (KCX_PROFILES overrides): the clusters a
 machine may fetch, in groups, each through a provider command and a secret provider.

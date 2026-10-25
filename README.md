@@ -5,10 +5,18 @@ namespace switcher, cluster profiles that fetch a kubeconfig by short name
 through your platform's own command with a brokered secret, a read-only shell
 for AI tools, and temp kind clusters on any Docker engine.
 
-**Status: in development.** This is the Go rewrite (2.0) of a bash tool that
-lived in the author's dotfiles. Nothing is released yet; the first release
-brings a Homebrew tap formula, mise's GitHub backend and attested release
-binaries for macOS, Linux and Windows on amd64 and arm64.
+![Terminal demo](.github/demo.gif)
+
+The recording runs the example profile against a kind cluster, with two small
+scripts standing in for the platform's command and its secret provider; every
+name in it is made up. [.github/demo.tape](.github/demo.tape) and
+[.github/demo-setup.sh](.github/demo-setup.sh) regenerate it.
+
+**Status: pre-release.** This is the Go rewrite (2.0) of a bash tool that
+lived in the author's dotfiles. The 2.0.0 release candidates are published
+with attested binaries for macOS, Linux and Windows on amd64 and arm64, which
+mise's GitHub backend installs; 2.0.0 itself, a Homebrew tap formula and
+notarised macOS binaries follow the author's usability pass.
 
 ## Why
 

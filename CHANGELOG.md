@@ -4,10 +4,12 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
-## 2.0.0-rc.1 (2026-10-25)
+## 2.0.0-rc.2 (2026-10-25)
 
 A pre-release for the author's own tests on every kind of machine, through the
-channels 2.0.0 will use. Everything listed under 2.0.0 below is in it.
+channels 2.0.0 will use. Everything listed under 2.0.0 below is in it. (rc.1
+was never published: its release job stopped at the cosign step, which now
+writes a Sigstore bundle.)
 
 ## Unreleased: 2.0.0
 

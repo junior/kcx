@@ -52,15 +52,19 @@ sboms:
   - id: archives
     artifacts: archive
 
+# Keyless cosign signature of the checksums, as a Sigstore bundle (cosign 3 and
+# later write the signature and its certificate in one file). Verify with:
+#   cosign verify-blob --bundle checksums.txt.sigstore.json \
+#     --certificate-identity-regexp '^https://github.com/junior/kcx/' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 signs:
   - id: checksums
     cmd: cosign
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
       - --yes
-      - --output-certificate=${certificate}
-      - --output-signature=${signature}
+      - --bundle=${signature}
       - ${artifact}
     artifacts: checksum
 

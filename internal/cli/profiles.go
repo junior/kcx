@@ -532,14 +532,7 @@ func (a *App) cmdNs(args []string) error {
 		if err != nil {
 			return err
 		}
-		list, err := ns.List(context.Background(), files, ctx, apiTimeout)
-		if err != nil {
-			return err
-		}
-		for _, n := range list {
-			fmt.Fprintln(a.stdout, n)
-		}
-		return nil
+		return a.pickNamespace(files, ctx)
 	}
 	ctx, current, err := ns.Current(files)
 	if err != nil {

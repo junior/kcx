@@ -13,6 +13,7 @@ import (
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
 	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/internal/shell"
 )
 
 // version is stamped by the release build (-X github.com/junior/kcx/internal/cli.version=...).
@@ -60,6 +61,10 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(
 			fmt.Fprintf(stderr, "kcx: %s\nRun kcx -h for the commands.\n", ue.msg)
 			return 2
 		}
+		var ee exitError
+		if errors.As(err, &ee) {
+			return ee.code // a command kcx ran for the user: its status, no message
+		}
 		fmt.Fprintf(stderr, "kcx: %s\n", err)
 		return 1
 	}
@@ -93,9 +98,19 @@ func (a *App) run(args []string) error {
 	case "__complete":
 		return a.cmdComplete(args[1:])
 	case "":
-		return a.cmdLs(nil)
+		return a.cmdPick()
 	case "-c", "current":
 		return a.cmdCurrent()
+	case "run":
+		return a.cmdRun(args[1:])
+	case "-r":
+		return a.cmdReadonly(args[1:])
+	case "init":
+		return a.cmdShell(shell.Init, "kcx init zsh|bash", args[1:])
+	case "completion":
+		return a.cmdShell(shell.Completion, "kcx completion zsh|bash", args[1:])
+	case "doctor":
+		return a.cmdDoctor(args[1:])
 	case "-":
 		if len(args) != 1 {
 			return usagef("kcx - takes no arguments")
@@ -146,6 +161,19 @@ func (a *App) cmdEnv() error {
 	return nil
 }
 
+// cmdShell prints a shell snippet: `kcx init SHELL` or `kcx completion SHELL`.
+func (a *App) cmdShell(f func(string) (string, error), usage string, args []string) error {
+	if len(args) != 1 {
+		return usagef("%s", usage)
+	}
+	s, err := f(args[0])
+	if err != nil {
+		return usagef("%s", err)
+	}
+	fmt.Fprint(a.stdout, s)
+	return nil
+}
+
 // cmdComplete prints the words tab completion may offer, given the words already
 // typed after `kcx`. The shell functions call it; it is not for people.
 func (a *App) cmdComplete(words []string) error {
@@ -180,8 +208,27 @@ func (a *App) cmdComplete(words []string) error {
 				}
 			}
 		}
-		for _, w := range []string{"ns", "fetch", "profile", "secret", "ls", "env", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
+		for _, w := range []string{"ns", "fetch", "run", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
 			fmt.Fprintln(a.stdout, w)
+		}
+	case "run", "-r":
+		if len(words) == 1 {
+			ctxs, _ := a.store().Contexts()
+			for _, c := range ctxs {
+				fmt.Fprintln(a.stdout, c)
+			}
+			if set, err := a.profiles(); err == nil {
+				for _, n := range set.Names() {
+					if !containsString(ctxs, n) {
+						fmt.Fprintln(a.stdout, n)
+					}
+				}
+			}
+		}
+	case "init", "completion":
+		if len(words) == 1 {
+			fmt.Fprintln(a.stdout, "zsh")
+			fmt.Fprintln(a.stdout, "bash")
 		}
 	case "ns", "namespace":
 		if len(words) == 1 {
@@ -235,7 +282,7 @@ func shellQuote(s string) string {
 
 const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the tools to use them.
 
-  kcx                         list the contexts (the picker comes in a later build)
+  kcx                         pick a context (fzf); the top line fetches a profile cluster
   kcx NAME [-u USER]          switch to NAME: a cluster file, a context, kind-NAME, or a
                               profile cluster, fetched first when its file is missing or
                               its credentials no longer work (--refresh: fetch regardless;
@@ -248,6 +295,20 @@ const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the 
                               it; without an argument, list the cluster's namespaces
       --force                 set it without asking the cluster whether it exists
   kcx env                     print the KUBECONFIG export line, for shells other than zsh
+  kcx run NAME [-n NS] -- CMD...
+                              run one command against NAME, the shared current context
+                              untouched: what agents should use. A switch or a namespace
+                              change inside stays inside. A cluster that is read-only by
+                              default runs behind the read-only proxy unless --rw
+  kcx -r [NAME] [-n NS] [-- CMD...]
+                              a read-only shell for NAME, or one read-only command: a
+                              local proxy refuses writes, exec, attach, port-forward and
+                              cp before they leave the machine; auth can-i still works
+  kcx init zsh|bash           the shell snippet: eval "$(kcx init zsh)" keeps KUBECONFIG
+                              in step and installs completion
+  kcx completion zsh|bash     the completion part alone
+  kcx doctor                  check the layout, the files, the settings, the profiles
+                              and the programs kcx relies on
 
 Profiles, ~/.config/kcx/profiles/*.toml (KCX_PROFILES overrides): the clusters a
 machine may fetch, in groups, each through a provider command and a secret provider.
@@ -288,6 +349,11 @@ Examples:
   kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
   ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
 
-This is a development build of kcx 2; the picker, the read-only shell, run and temp
-clusters land in the next builds. kcx 1.0, the bash script, keeps working beside it.
+Agents: every shell shares one current context, so a switch in one session points
+kubectl in all the others at another cluster. Name the cluster per command,
+kubectl --context NAME or kcx run NAME -- CMD, and use kcx -r for anything that only
+reads.
+
+This is a development build of kcx 2; temp kind clusters land in the next build.
+kcx 1.0, the bash script, keeps working beside it.
 `

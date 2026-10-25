@@ -111,10 +111,10 @@ func TestResolveAndCommand(t *testing.T) {
 		t.Fatalf("resolve: %q %q %v", host, user, err)
 	}
 	envWith := func(k string) string {
-		return map[string]string{"USER": "jane", "ACME_USER": "adm-jane"}[k]
+		return map[string]string{"USER": "jane", "ACME_USER": "ops-jane"}[k]
 	}
 	_, user, _ = set.Resolve(c, "", envWith)
-	if user != "adm-jane" {
+	if user != "ops-jane" {
 		t.Fatalf("the first non-empty template wins: %q", user)
 	}
 	_, user, _ = set.Resolve(c, "someone", envWith)

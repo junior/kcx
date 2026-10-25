@@ -53,3 +53,28 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   `~/.kube/kubens/<context>`, kubens's own file; NAME is checked against the
   cluster unless `--force`; inside a read-only shell `ns` writes the read-only
   kubeconfig.
+- `kcx run NAME [-n NS] [--rw] -- CMD...`: a private state file first in
+  `KUBECONFIG` holds a shadow of the context (the real cluster and user by
+  name, the run's own namespace), so a switch or a namespace change inside the
+  command lands there and nowhere else; the child's exit status is kcx's. A
+  cluster that is read-only by default runs behind the proxy unless `--rw`.
+- `kcx -r [NAME] [-n NS] [-- CMD...]`: the read-only shell and one-shot, now
+  an in-process reverse proxy on client-go's transport (exec plugins and OIDC
+  included), with no credential copy on disk. Refused before leaving the
+  machine: protocol upgrades (exec, attach, port-forward, cp), the `proxy`
+  subresource of pods, services and nodes, every method but GET, HEAD and
+  OPTIONS; allowed: the authorization and authentication reviews, so
+  `kubectl auth can-i` works. Refusals are a Kubernetes Status that kubectl
+  renders as an error naming kcx.
+- The picker: a bare `kcx` runs fzf over the contexts when fzf is on PATH and
+  stdout is a terminal (`picker = "plain"` turns it off); the top line fetches
+  a profile cluster that has no file yet; `kcx ns` without an argument picks a
+  namespace; `kcx -r` without a name picks a context.
+- `kcx init zsh|bash` and `kcx completion zsh|bash`: the `KUBECONFIG` rule in
+  pure shell (no kcx run per shell start), the guard for `KCX_RO` and
+  `KCX_RUN`, a prompt hook that recomputes the variable, and completion over
+  kcx's own word list; tested in bash 3.2, bash 5 and zsh.
+- `kcx doctor`: permissions, duplicate entries across files, a managed file
+  with a current context, files `KUBECONFIG` does not list, the shell's
+  `KUBECONFIG`, the settings, the profiles and whether their commands and
+  secret providers are on PATH.

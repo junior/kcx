@@ -6,31 +6,36 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/junior/kcx/internal/picker"
 	"github.com/junior/kcx/internal/profile"
 )
 
-// The drill-down's lists are pure functions over the profile; fzf itself is only
+// The drill-down's rows are pure functions over the profile; fzf itself is only
 // exercised by hand.
-func TestBrowseLines(t *testing.T) {
+func TestBrowseRows(t *testing.T) {
 	dir := t.TempDir()
 	content := `
 [provider.acme]
 command = ["acme", "{host}", "{out}"]
 [group.production]
+label    = "Production"
 provider = "acme"
+color    = "red"
 readonly = true
 [group.lab]
 provider = "acme"
+[group.empty]
+provider = "acme"
 [cluster.prod1]
 group = "production"
-site  = "austin"
+site  = "Austin"
 aliases = ["main"]
 [cluster.prod2]
 group = "production"
-site  = "austin"
+site  = "Austin"
 [cluster.prod3]
 group = "production"
-site  = "atlanta"
+site  = "Atlanta"
 [cluster.office2-lab]
 group = "lab"
 [cluster.office7-lab]
@@ -44,36 +49,47 @@ group = "lab"
 		t.Fatal(err)
 	}
 	fetched := func(n string) bool { return n == "prod1" || n == "office7-lab" }
-	got := groupLines(set, fetched)
-	want := []string{"lab\t2 clusters, 1 fetched", "production\t3 clusters, 1 fetched, read-only"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("groupLines: %q", got)
+	plain := func(_, s string) string { return s }
+	join := func(rows []picker.Line) string {
+		var parts []string
+		for _, r := range rows {
+			parts = append(parts, r.Value+"="+strings.Join(r.Cols, "|"))
+		}
+		return strings.Join(parts, "; ")
 	}
-	if s := sitesOf(set, "production"); strings.Join(s, ",") != "atlanta,austin" {
+
+	// Groups come in profile order, labelled, counted, flagged; an empty one is left out.
+	if got := join(groupRows(set, fetched, plain)); got != "production=Production|3 clusters|1 fetched|read-only; lab=lab|2 clusters|1 fetched" {
+		t.Fatalf("groupRows: %s", got)
+	}
+	// The colour paints what is shown, never the value that comes back.
+	if row := groupRows(set, fetched, picker.Paint)[0]; row.Value != "production" || row.Cols[0] != picker.Paint("red", "Production") {
+		t.Fatalf("groupRows painted: %+v", row)
+	}
+	// Sites in the order they first appear; no site counts under "-".
+	if s := sitesOf(set, "production"); strings.Join(s, ",") != "Austin,Atlanta" {
 		t.Fatalf("sitesOf production: %v", s)
 	}
 	if s := sitesOf(set, "lab"); strings.Join(s, ",") != "-" {
-		t.Fatalf("sitesOf lab (no sites): %v", s)
+		t.Fatalf("sitesOf lab: %v", s)
 	}
-	got = siteLines(set, "production", fetched)
-	want = []string{"atlanta\t1 clusters, 0 fetched", "austin\t2 clusters, 1 fetched"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("siteLines: %q", got)
+	if got := join(siteRows(set, "production", fetched)); got != "Austin=Austin|2 clusters|1 fetched; Atlanta=Atlanta|1 cluster|0 fetched" {
+		t.Fatalf("siteRows: %s", got)
 	}
-	got = clusterLines(set, "production", "austin", fetched)
-	want = []string{"prod1\tfetched  (main)", "prod2\t"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("clusterLines austin: %q", got)
+	// Clusters of one site: the marks for fetched and current, then the aliases.
+	if got := join(clusterRows(set, "production", "Austin", fetched, "prod1", plain)); got != "prod1=prod1|\u2713 *|(main); prod2=prod2||" {
+		t.Fatalf("clusterRows Austin: %s", got)
 	}
-	// Without a site filter the site shows in the description.
-	got = clusterLines(set, "production", "", fetched)
-	want = []string{"prod1\taustin  fetched  (main)", "prod2\taustin", "prod3\tatlanta"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("clusterLines all: %q", got)
+	if got := join(clusterRows(set, "production", "", fetched, "", plain)); got != "prod1=prod1|\u2713|(main); prod2=prod2||; prod3=prod3||" {
+		t.Fatalf("clusterRows production: %s", got)
 	}
-	got = clusterLines(set, "lab", "", fetched)
-	want = []string{"office2-lab\t", "office7-lab\tfetched"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("clusterLines lab: %q", got)
+	if got := join(clusterRows(set, "lab", "", fetched, "prod1", plain)); got != "office2-lab=office2-lab||; office7-lab=office7-lab|\u2713|" {
+		t.Fatalf("clusterRows lab: %s", got)
+	}
+	if total, done := fetchedCount(set, fetched); total != 5 || done != 2 {
+		t.Fatalf("fetchedCount: %d %d", total, done)
+	}
+	if counts(1, 0) != "1 cluster, 0 fetched" || counts(72, 3) != "72 clusters, 3 fetched" {
+		t.Fatal("counts")
 	}
 }

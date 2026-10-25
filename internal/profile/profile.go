@@ -5,7 +5,7 @@
 // A profile has three kinds of table:
 //
 //	[provider.NAME]   how a kubeconfig is obtained: kind, command, secret, templates
-//	[group.NAME]      defaults for a set of clusters: provider, color, readonly
+//	[group.NAME]      defaults for a set of clusters: provider, label, color, readonly
 //	[cluster.NAME]    one cluster: group, site, aliases, overrides
 //
 // Several files are read in sorted order and merged; a name defined twice is an
@@ -82,11 +82,24 @@ func (p *Provider) TimeoutDuration() time.Duration { return p.timeout }
 // Group is a set of clusters with shared defaults.
 type Group struct {
 	Name     string `toml:"-"`
+	Label    string `toml:"label"` // what the picker shows for the group; the name when empty
 	Provider string `toml:"provider"`
-	Color    string `toml:"color"`
+	Color    string `toml:"color"` // one of Colors, or empty
 	Readonly bool   `toml:"readonly"`
 	Source   string `toml:"-"`
 }
+
+// Display is the group's label, or its name when it has none.
+func (g *Group) Display() string {
+	if g.Label != "" {
+		return g.Label
+	}
+	return g.Name
+}
+
+// Colors are the colour names a group may carry; the picker paints its rows
+// with them.
+var Colors = []string{"red", "green", "yellow", "blue", "magenta", "cyan", "white"}
 
 // Cluster is one cluster a profile knows.
 type Cluster struct {
@@ -101,13 +114,17 @@ type Cluster struct {
 	Source   string   `toml:"-"`
 }
 
-// Set is the merged content of every profile file.
+// Set is the merged content of every profile file. Groups and clusters keep the
+// order the files list them in (file by file, as Files sorts them): a picker
+// shows them that way, and a fetch of many walks them that way.
 type Set struct {
 	Providers map[string]*Provider
 	Groups    map[string]*Group
 	Clusters  map[string]*Cluster
 	Files     []string
 	aliases   map[string]string // alias -> cluster name
+	groups    []string          // group names in file order
+	clusters  []string          // cluster names in file order
 }
 
 type fileContent struct {
@@ -197,6 +214,8 @@ func Load(files []string) (*Set, error) {
 			cl.Name, cl.Source = name, f
 			set.Clusters[name] = cl
 		}
+		set.groups = append(set.groups, ordered(meta, "group", c.Group)...)
+		set.clusters = append(set.clusters, ordered(meta, "cluster", c.Cluster)...)
 	}
 	if err := set.validate(); err != nil {
 		return nil, err
@@ -236,6 +255,9 @@ func (s *Set) validate() error {
 			if _, ok := s.Providers[g.Provider]; !ok {
 				return fmt.Errorf("%s: group %s names provider %s, which no profile defines", g.Source, name, g.Provider)
 			}
+		}
+		if g.Color != "" && !containsName(Colors, g.Color) {
+			return fmt.Errorf("%s: group %s: color %q is not one of %s", g.Source, name, g.Color, strings.Join(Colors, ", "))
 		}
 	}
 	names := make([]string, 0, len(s.Clusters))
@@ -292,26 +314,58 @@ func (s *Set) Lookup(name string) (*Cluster, bool) {
 	return nil, false
 }
 
-// Names lists the cluster names, sorted.
+// Names lists the cluster names in the order the profiles list them.
 func (s *Set) Names() []string {
-	out := make([]string, 0, len(s.Clusters))
-	for n := range s.Clusters {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
+	return append([]string(nil), s.clusters...)
 }
 
-// InGroup lists the clusters of a group, sorted.
+// GroupNames lists the group names in the order the profiles list them.
+func (s *Set) GroupNames() []string {
+	return append([]string(nil), s.groups...)
+}
+
+// InGroup lists the clusters of a group, in the order the profiles list them.
 func (s *Set) InGroup(group string) []string {
 	var out []string
-	for n, c := range s.Clusters {
-		if c.Group == group {
+	for _, n := range s.clusters {
+		if s.Clusters[n].Group == group {
 			out = append(out, n)
 		}
 	}
-	sort.Strings(out)
 	return out
+}
+
+// ordered lists the names of a file's tables under one head ("group" or
+// "cluster") in the order written, as the decoder saw them, with any the file
+// declared another way appended in name order.
+func ordered[V any](meta toml.MetaData, head string, tables map[string]V) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, k := range meta.Keys() {
+		if len(k) == 2 && k[0] == head {
+			if _, ok := tables[k[1]]; ok && !seen[k[1]] {
+				seen[k[1]] = true
+				out = append(out, k[1])
+			}
+		}
+	}
+	var rest []string
+	for n := range tables {
+		if !seen[n] {
+			rest = append(rest, n)
+		}
+	}
+	sort.Strings(rest)
+	return append(out, rest...)
+}
+
+func containsName(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // GroupOf returns the cluster's group.

@@ -387,7 +387,7 @@ func (a *App) tempWizard() error {
 				}
 				lines = append(lines, c.Name+"\t"+desc)
 			}
-			engine, err = p.Pick(lines, "Engine> ", "which Docker engine runs the cluster; ESC cancels")
+			engine, err = p.Pick(lines, "Engine> ", "which Docker engine runs the cluster"+sep+"ESC cancels")
 			if err != nil || engine == "" {
 				return err
 			}
@@ -397,7 +397,7 @@ func (a *App) tempWizard() error {
 			for _, pr := range temp.Presets(a.lay.Presets) {
 				lines = append(lines, pr+"\t"+filepath.Join(a.lay.Presets, pr+".yaml"))
 			}
-			cfg, err = p.Pick(lines, "Config> ", "on "+engine+"; ESC goes back")
+			cfg, err = p.Pick(lines, "Config> ", "on "+engine+sep+"ESC back")
 			if err != nil {
 				return err
 			}

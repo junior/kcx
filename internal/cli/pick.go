@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/junior/kcx/internal/kubeconfig"
+	"github.com/junior/kcx/internal/layout"
 	"github.com/junior/kcx/internal/ns"
 	"github.com/junior/kcx/internal/picker"
 	"github.com/junior/kcx/internal/profile"
@@ -16,6 +18,13 @@ import (
 
 // sortStrings is sort.Strings, kept here so doctor.go needs no extra import.
 func sortStrings(s []string) { sort.Strings(s) }
+
+const (
+	pickFetch   = "+ fetch / browse the profile clusters"
+	markFetched = "\u2713" // a check mark: the cluster has its file
+	markCurrent = "*"      // the current context
+	sep         = "  |  "  // between the parts of a picker's header
+)
 
 func (a *App) picker() picker.Picker {
 	p := picker.Picker{}
@@ -28,6 +37,20 @@ func (a *App) picker() picker.Picker {
 	return p
 }
 
+// paint colours s the way a profile group asks, unless NO_COLOR is set.
+func (a *App) paint(color, s string) string {
+	if a.getenv("NO_COLOR") != "" {
+		return s
+	}
+	return picker.Paint(color, s)
+}
+
+// fetched says whether a profile cluster has its file.
+func (a *App) fetched(name string) bool {
+	_, err := os.Stat(a.lay.PermFile(name))
+	return err == nil
+}
+
 // pickContext offers the contexts in fzf and returns the one chosen, or "" on a
 // cancel. Without a picker it returns an error that says to name the context.
 func (a *App) pickContext(prompt, header string) (string, error) {
@@ -35,15 +58,17 @@ func (a *App) pickContext(prompt, header string) (string, error) {
 	if !p.Available() {
 		return "", usagef("name the context (no picker: fzf on PATH and a terminal are needed)")
 	}
-	lines, err := a.contextLines()
+	rows, err := a.contextRows()
 	if err != nil {
 		return "", err
 	}
-	return p.Pick(lines, prompt, header)
+	return p.PickLines(rows, prompt, header+sep+markCurrent+" current"+sep+"ESC cancels")
 }
 
-// contextLines are the picker's rows: "context<TAB>(where) [group]  current".
-func (a *App) contextLines() ([]string, error) {
+// contextRows are the picker's rows, one per context: its name, its group (or
+// where its file lives), its site, and the current marker. A context that is a
+// profile cluster's takes its group's colour and label.
+func (a *App) contextRows() ([]picker.Line, error) {
 	s := a.store()
 	cur, err := s.Current()
 	if err != nil {
@@ -53,7 +78,7 @@ func (a *App) contextLines() ([]string, error) {
 	if ps, err := a.profiles(); err == nil {
 		set = ps
 	}
-	var lines []string
+	var rows []picker.Line
 	for _, f := range s.Files {
 		if _, err := os.Stat(f); err != nil {
 			continue
@@ -68,29 +93,41 @@ func (a *App) contextLines() ([]string, error) {
 		}
 		sort.Strings(names)
 		for _, n := range names {
-			desc := "(" + a.lay.Where(f) + ")"
+			shown, place, site := n, "("+a.lay.Where(f)+")", ""
 			if set != nil {
-				if c, ok := set.Lookup(fileNameOf(a.lay, n, n)); ok {
-					desc += " " + c.Group
+				if c, ok := set.Lookup(clusterNameOf(a.lay, f, n, len(names))); ok {
+					g := set.Groups[c.Group]
+					shown = a.paint(g.Color, n)
+					place = a.paint(g.Color, g.Display())
 					if set.Readonly(c) {
-						desc += ", read-only"
+						place += ", read-only"
 					}
+					site = c.Site
 				}
 			}
+			mark := ""
 			if n == cur {
-				desc += "  current"
+				mark = markCurrent
 			}
-			lines = append(lines, n+"\t"+desc)
+			rows = append(rows, picker.Line{Value: n, Cols: []string{shown, place, site, mark}})
 		}
 	}
-	return lines, nil
+	return rows, nil
 }
 
-const pickFetch = "+ fetch / browse the profile clusters"
+// clusterNameOf is the profile name a context may stand for: the file's name
+// when the file is a permanent cluster's holding that one context (the file is
+// the short name, whatever the context is called), else the context's own.
+func clusterNameOf(lay layout.Layout, file, ctx string, contexts int) string {
+	if contexts == 1 && filepath.Dir(file) == lay.Perm {
+		return strings.TrimSuffix(filepath.Base(file), ".yaml")
+	}
+	return ctx
+}
 
 // cmdPick is `kcx` with no arguments: the picker when there is one, the list
-// otherwise. The top lines browse the profiles (group, site, cluster, the way
-// the clusters are organised) and make a temp cluster.
+// otherwise. The top line browses the profiles (group, site, cluster, the way
+// the clusters are organised); the next makes a temp cluster.
 func (a *App) cmdPick() error {
 	p := a.picker()
 	if !p.Available() {
@@ -99,25 +136,24 @@ func (a *App) cmdPick() error {
 	if err := a.runGuard(); err != nil {
 		return err
 	}
-	lines, err := a.contextLines()
+	rows, err := a.contextRows()
 	if err != nil {
 		return err
 	}
+	header := "switch context"
+	var top []picker.Line
 	var set *profile.Set
 	if s, err := a.profiles(); err == nil && len(s.Names()) > 0 {
 		set = s
-		fetched := 0
-		for _, n := range set.Names() {
-			if _, err := os.Stat(a.lay.PermFile(n)); err == nil {
-				fetched++
-			}
-		}
-		lines = append([]string{fmt.Sprintf("%s\t%d clusters, %d fetched", pickFetch, len(set.Names()), fetched)}, lines...)
+		total, done := fetchedCount(set, a.fetched)
+		top = append(top, picker.Line{Value: pickFetch, Cols: []string{pickFetch, counts(total, done)}})
+		header = "switch, or browse the profiles from the top line"
 	}
 	if _, err := lookPath("kind"); err == nil {
-		lines = append([]string{pickTemp + "\ton any Docker engine"}, lines...)
+		top = append(top, picker.Line{Value: pickTemp, Cols: []string{pickTemp, "on any Docker engine"}})
 	}
-	pick, err := p.Pick(lines, "context> ", "switch context; the top lines browse the profiles or make a temp cluster; ESC cancels")
+	rows = append(top, rows...)
+	pick, err := p.PickLines(rows, "context> ", header+sep+markCurrent+" current"+sep+"ESC cancels")
 	if err != nil {
 		return err
 	}
@@ -137,20 +173,29 @@ func (a *App) cmdPick() error {
 }
 
 // browse is the profile drill-down: group, then site (when the group spans more
-// than one), then cluster, with the fetched ones marked. ESC steps back, and at
-// the first step cancels. It returns the chosen cluster's name, "" on a cancel.
+// than one), then cluster, with the fetched ones and the current one marked.
+// ESC steps back, and at the first step cancels; q quits from any step. It
+// returns the chosen cluster's name, "" on a cancel or a quit.
 func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
-	fetched := func(name string) bool {
-		_, err := os.Stat(a.lay.PermFile(name))
-		return err == nil
+	p.Quit = true
+	current := ""
+	if cur, err := a.store().Current(); err == nil && cur != "" {
+		current = fileNameOf(a.lay, cur, cur)
+	}
+	done := func(err error) (string, error) {
+		if errors.Is(err, picker.ErrQuit) {
+			return "", nil
+		}
+		return "", err
 	}
 	step, group, site := "group", "", ""
 	for {
 		switch step {
 		case "group":
-			pick, err := p.Pick(groupLines(set, fetched), "Group> ", "which group of clusters; ESC cancels")
+			total, fetched := fetchedCount(set, a.fetched)
+			pick, err := p.PickLines(groupRows(set, a.fetched, a.paint), "Group> ", counts(total, fetched)+sep+"ESC cancels  q quits")
 			if err != nil || pick == "" {
-				return "", err
+				return done(err)
 			}
 			group = pick
 			if len(sitesOf(set, group)) > 1 {
@@ -160,9 +205,9 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 				step = "cluster"
 			}
 		case "site":
-			pick, err := p.Pick(siteLines(set, group, fetched), "Site> ", group+"; ESC goes back")
+			pick, err := p.PickLines(siteRows(set, group, a.fetched), "Site> ", set.Groups[group].Display()+sep+"ESC back  q quits")
 			if err != nil {
-				return "", err
+				return done(err)
 			}
 			if pick == "" {
 				step = "group"
@@ -171,13 +216,17 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 			site = pick
 			step = "cluster"
 		case "cluster":
-			header := group
-			if site != "" {
-				header += " > " + site
+			crumbs := set.Groups[group].Display()
+			shown := site
+			if sites := sitesOf(set, group); shown == "" && len(sites) == 1 {
+				shown = sites[0]
 			}
-			pick, err := p.Pick(clusterLines(set, group, site, fetched), "Cluster> ", header+"; fetched ones switch, the others are fetched first; ESC goes back")
+			if shown != "" && shown != "-" {
+				crumbs += " > " + shown
+			}
+			pick, err := p.PickLines(clusterRows(set, group, site, a.fetched, current, a.paint), "Cluster> ", crumbs+sep+markFetched+" fetched  "+markCurrent+" current"+sep+"ESC back  q quits")
 			if err != nil {
-				return "", err
+				return done(err)
 			}
 			if pick == "" {
 				if len(sitesOf(set, group)) > 1 {
@@ -192,64 +241,83 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 	}
 }
 
-// groupLines lists the groups that have clusters, with counts, in a stable order:
-// the order the profiles name them is not kept by TOML, so sorted by name.
-func groupLines(set *profile.Set, fetched func(string) bool) []string {
-	counts := map[string][2]int{}
+// fetchedCount counts the profile clusters and those that have their file.
+func fetchedCount(set *profile.Set, fetched func(string) bool) (total, done int) {
 	for _, n := range set.Names() {
-		c := set.Clusters[n]
-		v := counts[c.Group]
-		v[0]++
+		total++
 		if fetched(n) {
-			v[1]++
+			done++
 		}
-		counts[c.Group] = v
 	}
-	groups := make([]string, 0, len(counts))
-	for g := range counts {
-		groups = append(groups, g)
-	}
-	sort.Strings(groups)
-	var lines []string
-	for _, g := range groups {
-		desc := fmt.Sprintf("%d clusters, %d fetched", counts[g][0], counts[g][1])
-		if set.Groups[g].Readonly {
-			desc += ", read-only"
-		}
-		lines = append(lines, g+"\t"+desc)
-	}
-	return lines
+	return total, done
 }
 
-// sitesOf lists the sites of a group's clusters, sorted; a cluster without a site
-// counts under "-".
+// counts is "N clusters, F fetched".
+func counts(total, done int) string {
+	return fmt.Sprintf("%s, %d fetched", plural(total, "cluster"), done)
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// groupRows lists the groups that have clusters, in profile order: the label
+// in the group's colour, the counts, and the read-only flag.
+func groupRows(set *profile.Set, fetched func(string) bool, paint func(color, s string) string) []picker.Line {
+	var rows []picker.Line
+	for _, g := range set.GroupNames() {
+		names := set.InGroup(g)
+		if len(names) == 0 {
+			continue
+		}
+		done := 0
+		for _, n := range names {
+			if fetched(n) {
+				done++
+			}
+		}
+		grp := set.Groups[g]
+		cols := []string{paint(grp.Color, grp.Display()), plural(len(names), "cluster"), fmt.Sprintf("%d fetched", done)}
+		if grp.Readonly {
+			cols = append(cols, "read-only")
+		}
+		rows = append(rows, picker.Line{Value: g, Cols: cols})
+	}
+	return rows
+}
+
+// sitesOf lists the sites of a group's clusters in the order they first appear;
+// a cluster without a site counts under "-".
 func sitesOf(set *profile.Set, group string) []string {
+	var sites []string
 	seen := map[string]bool{}
 	for _, n := range set.InGroup(group) {
-		s := set.Clusters[n].Site
-		if s == "" {
-			s = "-"
+		s := siteOf(set.Clusters[n])
+		if !seen[s] {
+			seen[s] = true
+			sites = append(sites, s)
 		}
-		seen[s] = true
 	}
-	sites := make([]string, 0, len(seen))
-	for s := range seen {
-		sites = append(sites, s)
-	}
-	sort.Strings(sites)
 	return sites
 }
 
-func siteLines(set *profile.Set, group string, fetched func(string) bool) []string {
-	var lines []string
+func siteOf(c *profile.Cluster) string {
+	if c.Site == "" {
+		return "-"
+	}
+	return c.Site
+}
+
+// siteRows lists a group's sites with their counts.
+func siteRows(set *profile.Set, group string, fetched func(string) bool) []picker.Line {
+	var rows []picker.Line
 	for _, s := range sitesOf(set, group) {
 		total, done := 0, 0
 		for _, n := range set.InGroup(group) {
-			cs := set.Clusters[n].Site
-			if cs == "" {
-				cs = "-"
-			}
-			if cs != s {
+			if siteOf(set.Clusters[n]) != s {
 				continue
 			}
 			total++
@@ -257,43 +325,36 @@ func siteLines(set *profile.Set, group string, fetched func(string) bool) []stri
 				done++
 			}
 		}
-		lines = append(lines, fmt.Sprintf("%s\t%d clusters, %d fetched", s, total, done))
+		rows = append(rows, picker.Line{Value: s, Cols: []string{s, plural(total, "cluster"), fmt.Sprintf("%d fetched", done)}})
 	}
-	return lines
+	return rows
 }
 
-// clusterLines lists the clusters of a group (and site, when given) with their
-// state: "fetched" for the ones that have a file.
-func clusterLines(set *profile.Set, group, site string, fetched func(string) bool) []string {
-	var lines []string
+// clusterRows lists the clusters of a group (of one site, when given) in
+// profile order: the name in the group's colour, the fetched and current
+// marks, and the aliases.
+func clusterRows(set *profile.Set, group, site string, fetched func(string) bool, current string, paint func(color, s string) string) []picker.Line {
+	color := set.Groups[group].Color
+	var rows []picker.Line
 	for _, n := range set.InGroup(group) {
 		c := set.Clusters[n]
-		cs := c.Site
-		if cs == "" {
-			cs = "-"
-		}
-		if site != "" && cs != site {
+		if site != "" && siteOf(c) != site {
 			continue
 		}
-		desc := ""
-		if site == "" && c.Site != "" {
-			desc = c.Site
-		}
+		var marks []string
 		if fetched(n) {
-			if desc != "" {
-				desc += "  "
-			}
-			desc += "fetched"
+			marks = append(marks, markFetched)
 		}
+		if n == current {
+			marks = append(marks, markCurrent)
+		}
+		aliases := ""
 		if len(c.Aliases) > 0 {
-			if desc != "" {
-				desc += "  "
-			}
-			desc += "(" + strings.Join(c.Aliases, ", ") + ")"
+			aliases = "(" + strings.Join(c.Aliases, ", ") + ")"
 		}
-		lines = append(lines, n+"\t"+desc)
+		rows = append(rows, picker.Line{Value: n, Cols: []string{paint(color, n), strings.Join(marks, " "), aliases}})
 	}
-	return lines
+	return rows
 }
 
 // pickNamespace is `kcx ns` with no argument on a terminal: the cluster's
@@ -311,15 +372,15 @@ func (a *App) pickNamespace(files []string, ctx string) error {
 		return nil
 	}
 	current, _ := ns.Of(files, ctx)
-	var lines []string
+	var rows []picker.Line
 	for _, n := range list {
+		mark := ""
 		if n == current {
-			lines = append(lines, n+"\tcurrent")
-		} else {
-			lines = append(lines, n)
+			mark = markCurrent
 		}
+		rows = append(rows, picker.Line{Value: n, Cols: []string{n, mark}})
 	}
-	choice, err := p.Pick(lines, "namespace> ", "namespace of "+ctx+"; ESC cancels")
+	choice, err := p.PickLines(rows, "namespace> ", "namespace of "+ctx+sep+markCurrent+" current"+sep+"ESC cancels")
 	if errors.Is(err, picker.ErrUnavailable) || choice == "" {
 		return err
 	}

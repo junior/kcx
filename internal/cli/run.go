@@ -154,7 +154,7 @@ func (a *App) cmdReadonly(args []string) error {
 		}
 	}
 	if name == "" {
-		picked, err := a.pickContext("read-only> ", "a READ-ONLY shell for which context? ESC cancels")
+		picked, err := a.pickContext("read-only> ", "a READ-ONLY shell for which context?")
 		if err != nil {
 			return err
 		}

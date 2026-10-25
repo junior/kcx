@@ -17,6 +17,7 @@ rejected = "401|access_denied"
 timeout  = "90s"
 
 [group.production]
+label    = "Production"
 provider = "acme"
 color    = "red"
 readonly = true
@@ -68,8 +69,15 @@ func TestFilesAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(set.Names(), ",") != "odd-one,office2-lab,prod1,z" {
+	// Names and groups come file by file, in the order written, not sorted.
+	if strings.Join(set.Names(), ",") != "z,prod1,office2-lab,odd-one" {
 		t.Fatalf("names: %v", set.Names())
+	}
+	if strings.Join(set.GroupNames(), ",") != "g,production,lab" {
+		t.Fatalf("groups: %v", set.GroupNames())
+	}
+	if set.Groups["production"].Display() != "Production" || set.Groups["lab"].Display() != "lab" {
+		t.Fatal("a group shows its label, or its name without one")
 	}
 	c, ok := set.Lookup("main")
 	if !ok || c.Name != "prod1" {
@@ -84,7 +92,7 @@ func TestFilesAndLoad(t *testing.T) {
 	if o, _ := set.Lookup("odd-one"); !set.Readonly(o) {
 		t.Fatal("odd-one sets readonly itself")
 	}
-	if strings.Join(set.InGroup("lab"), ",") != "odd-one,office2-lab" {
+	if strings.Join(set.InGroup("lab"), ",") != "office2-lab,odd-one" {
 		t.Fatalf("InGroup: %v", set.InGroup("lab"))
 	}
 	p := set.ProviderOf(c)
@@ -146,6 +154,7 @@ func TestLoadRefusesMistakes(t *testing.T) {
 	good := writeProfile(t, dir, "good.toml", acme)
 	cases := map[string]struct{ content, want string }{
 		"dup-cluster":      {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.prod1]\ngroup = \"g\"\n", "cluster prod1 is defined in"},
+		"bad-color":        {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\ncolor = \"plaid\"\n[cluster.q]\ngroup = \"g\"\n", "color \"plaid\" is not one of"},
 		"dup-provider":     {"[provider.acme]\ncommand = [\"t\"]\n", "provider acme is defined in"},
 		"unknown-key":      {"[provider.y]\ncommand = [\"t\"]\ncolour = \"red\"\n", "unknown key(s): provider.y.colour"},
 		"no-group":         {"[cluster.lonely]\n", "has no group"},

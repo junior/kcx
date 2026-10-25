@@ -67,9 +67,11 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   `kubectl auth can-i` works. Refusals are a Kubernetes Status that kubectl
   renders as an error naming kcx.
 - The picker: a bare `kcx` runs fzf over the contexts when fzf is on PATH and
-  stdout is a terminal (`picker = "plain"` turns it off); the top line fetches
-  a profile cluster that has no file yet; `kcx ns` without an argument picks a
-  namespace; `kcx -r` without a name picks a context.
+  stdout is a terminal (`picker = "plain"` turns it off); the top line browses
+  the profiles the way the clusters are organised, group, then site, then
+  cluster, with the fetched ones marked, and fetches or switches; `kcx ns`
+  without an argument picks a namespace; `kcx -r` without a name picks a
+  context.
 - `kcx init zsh|bash` and `kcx completion zsh|bash`: the `KUBECONFIG` rule in
   pure shell (no kcx run per shell start), the guard for `KCX_RO` and
   `KCX_RUN`, a prompt hook that recomputes the variable, and completion over

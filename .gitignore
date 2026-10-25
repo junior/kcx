@@ -1,5 +1,6 @@
 # Build output and local tooling state. Nothing under ~/.kube is ever here.
 /dist/
+/bin/
 /kcx
 *.test
 *.out

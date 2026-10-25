@@ -112,13 +112,18 @@ func (a *App) cmdPick() error {
 	if len(unfetched) > 0 {
 		lines = append([]string{pickFetch + "\t" + fmt.Sprintf("%d not fetched yet", len(unfetched))}, lines...)
 	}
-	pick, err := p.Pick(lines, "context> ", "switch context; ESC cancels")
+	if _, err := lookPath("kind"); err == nil {
+		lines = append([]string{pickTemp + "\ton any Docker engine"}, lines...)
+	}
+	pick, err := p.Pick(lines, "context> ", "switch context; the top lines make or fetch a cluster; ESC cancels")
 	if err != nil {
 		return err
 	}
 	switch pick {
 	case "":
 		return nil
+	case pickTemp:
+		return a.tempWizard()
 	case pickFetch:
 		set, _ := a.profiles()
 		var rows []string

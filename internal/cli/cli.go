@@ -14,6 +14,7 @@ import (
 	"github.com/junior/kcx/internal/layout"
 	"github.com/junior/kcx/internal/profile"
 	"github.com/junior/kcx/internal/shell"
+	"github.com/junior/kcx/internal/temp"
 )
 
 // version is stamped by the release build (-X github.com/junior/kcx/internal/cli.version=...).
@@ -111,6 +112,8 @@ func (a *App) run(args []string) error {
 		return a.cmdShell(shell.Completion, "kcx completion zsh|bash", args[1:])
 	case "doctor":
 		return a.cmdDoctor(args[1:])
+	case "temp":
+		return a.cmdTemp(args[1:])
 	case "-":
 		if len(args) != 1 {
 			return usagef("kcx - takes no arguments")
@@ -188,6 +191,18 @@ func (a *App) cmdComplete(words []string) error {
 	switch last {
 	case "--context", "--server", "--context-name", "--user-name", "-":
 		return nil
+	case "--engine":
+		if ctxs, err := newEngine().Contexts(); err == nil {
+			for _, c := range ctxs {
+				fmt.Fprintln(a.stdout, c.Name)
+			}
+		}
+		return nil
+	case "--config":
+		for _, p := range temp.Presets(a.lay.Presets) {
+			fmt.Fprintln(a.stdout, p)
+		}
+		return nil
 	}
 	names := func(dir string) {
 		for _, f := range layout.DirFiles(dir) {
@@ -208,7 +223,7 @@ func (a *App) cmdComplete(words []string) error {
 				}
 			}
 		}
-		for _, w := range []string{"ns", "fetch", "run", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
+		for _, w := range []string{"ns", "fetch", "run", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "temp", "-c", "-", "-h", "-v"} {
 			fmt.Fprintln(a.stdout, w)
 		}
 	case "run", "-r":
@@ -229,6 +244,25 @@ func (a *App) cmdComplete(words []string) error {
 		if len(words) == 1 {
 			fmt.Fprintln(a.stdout, "zsh")
 			fmt.Fprintln(a.stdout, "bash")
+		}
+	case "temp":
+		sub := ""
+		if len(words) > 1 {
+			sub = words[1]
+		}
+		switch sub {
+		case "":
+			for _, w := range []string{"create", "ls", "rm", "prune", "add"} {
+				fmt.Fprintln(a.stdout, w)
+			}
+		case "rm", "remove", "delete":
+			if len(words) == 2 {
+				names(a.lay.Temp)
+			}
+		case "create":
+			for _, w := range []string{"--engine", "--config", "--use"} {
+				fmt.Fprintln(a.stdout, w)
+			}
 		}
 	case "ns", "namespace":
 		if len(words) == 1 {
@@ -342,18 +376,30 @@ Permanent clusters, one file each in ~/.kube/configs:
   kcx adopt CTX [NAME]        move a context another tool wrote into ~/.kube/config
                               into a file of its own
 
-  kcx -v                      version          kcx -h    this help
+Temp clusters, kind, one file each in ~/.kube/temp:
+  kcx temp create NAME [--engine DOCKER_CONTEXT] [--config PRESET|FILE] [--use] [-- KIND_ARGS...]
+                              DOCKER_CONTEXT: the engine to run on (default: docker's
+                              current one); on a remote engine the API server listens
+                              on the engine's network address. PRESET: a file in
+                              ~/.config/kind; without --config, kind's own one-node
+                              cluster. The context is kind-NAME.
+  kcx temp ls                 temp clusters, and whether each still exists
+  kcx temp rm NAME            delete the cluster and its kubeconfig
+  kcx temp prune              delete the kubeconfigs of clusters that are gone
+  kcx temp add NAME FILE|-|-- CMD...
+                              keep another tool's temp cluster (k3d, minikube) here
 
-Examples:
-  kcx add eks-lab -- aws eks update-kubeconfig --name lab --region us-west-2
-  kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
-  ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
+  kcx -v                      version          kcx -h    this help
 
 Agents: every shell shares one current context, so a switch in one session points
 kubectl in all the others at another cluster. Name the cluster per command,
 kubectl --context NAME or kcx run NAME -- CMD, and use kcx -r for anything that only
 reads.
 
-This is a development build of kcx 2; temp kind clusters land in the next build.
-kcx 1.0, the bash script, keeps working beside it.
+Examples:
+  kcx add eks-lab -- aws eks update-kubeconfig --name lab --region us-west-2
+  kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
+  ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
+  kcx temp create t1 --engine lab --config calico
+  kcx run kind-t1 -- kubectl get nodes
 `

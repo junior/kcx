@@ -1,0 +1,69 @@
+# An example profile for kcx: the clusters a machine may fetch, in groups, each
+# through a provider command and a secret provider. kcx ships no profile of its
+# own; copy this to ~/.config/kcx/profiles/ and make it yours. Names are made up.
+#
+# Templates may use {name} (the cluster's short name), {host}, {user}, {out} (the
+# file the command must write) and {env.VAR}. A list of templates means: the
+# first that renders to something non-empty.
+
+# A platform with its own command that takes a password on standard input. The
+# secret comes from a provider program with four verbs: get (to a pipe), refresh,
+# forget, status. "acme-secret" is looked up as kcx-secret-acme-secret, then as
+# acme-secret, on PATH. Output matching `rejected` means the password was refused,
+# which triggers kcx's lockout policy (forget, ask once, retry once, stop).
+[provider.acme]
+kind     = "command"
+command  = ["acme", "get-kubeconfig", "{host}", "-u", "{user}", "-c", "{out}"]
+secret   = "acme-secret"
+host     = "{name}.k8s.acme.example"
+user     = ["{env.ACME_USER}", "{env.USER}"]
+rejected = "401|access_denied|invalid username or password"
+timeout  = "120s"
+# context_name = "{user}@{name}"   # how the context is named; default: the short name
+# user_name    = "{user}"          # how the user entry is named; default: the short name
+
+# Cloud CLIs need no secret provider: they authenticate on their own.
+[provider.eks]
+command = ["aws", "eks", "update-kubeconfig", "--name", "{name}", "--region", "{env.AWS_REGION}", "--kubeconfig", "{out}"]
+
+[provider.gke]
+command = ["gcloud", "container", "clusters", "get-credentials", "{name}", "--region", "us-central1"]
+
+[provider.aks]
+command = ["az", "aks", "get-credentials", "--name", "{name}", "--resource-group", "{env.AZ_GROUP}", "--file", "{out}"]
+
+[group.production]
+provider = "acme"
+color    = "red"
+readonly = true     # kcx run and kcx shell use the read-only proxy unless --rw
+
+[group.lab]
+provider = "acme"
+color    = "green"
+
+[group.cloud]
+provider = "eks"
+
+[cluster.p1]
+group   = "production"
+site    = "austin"
+aliases = ["prod1"]
+
+[cluster.p2]
+group = "production"
+site  = "atlanta"
+
+[cluster.r4-lab]
+group = "lab"
+site  = "round-rock"
+
+[cluster.odd-one]
+group = "lab"
+host  = "k8s.odd.acme.example"   # overrides the provider's host template
+
+[cluster.eks-lab]
+group = "cloud"
+
+[cluster.gke-lab]
+group    = "cloud"
+provider = "gke"

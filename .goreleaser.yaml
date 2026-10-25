@@ -1,0 +1,90 @@
+# GoReleaser configuration for kcx. One Linux job cross-builds every platform,
+# writes checksums and SBOMs, signs the checksums with cosign (keyless), and signs
+# and notarises the macOS binaries when the release has the Apple credentials.
+version: 2
+
+project_name: kcx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kcx
+    main: ./cmd/kcx
+    binary: kcx
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/junior/kcx/internal/cli.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# One download that fits every Mac, beside the per-architecture builds.
+universal_binaries:
+  - id: kcx-universal
+    ids: [kcx]
+    replace: false
+    name_template: kcx
+
+archives:
+  - id: default
+    ids: [kcx, kcx-universal]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - SECURITY.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: archives
+    artifacts: archive
+
+signs:
+  - id: checksums
+    cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-certificate=${certificate}
+      - --output-signature=${signature}
+      - ${artifact}
+    artifacts: checksum
+
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [kcx, kcx-universal]
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
+changelog:
+  disable: true # the release notes come from CHANGELOG.md, kept by hand
+
+release:
+  github:
+    owner: junior
+    name: kcx
+  draft: false
+  prerelease: auto
+  mode: replace

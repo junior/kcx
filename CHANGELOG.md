@@ -78,3 +78,12 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   with a current context, files `KUBECONFIG` does not list, the shell's
   `KUBECONFIG`, the settings, the profiles and whether their commands and
   secret providers are on PATH.
+- Temp kind clusters, as in 1.0: `kcx temp create NAME [--engine CTX]
+  [--config PRESET|FILE] [--use] [-- KIND_ARGS...]` (on a remote engine the
+  API server listens on the engine's address on a port kcx picks, with a
+  retry on a collision), `kcx temp ls|rm|prune|add`, and the picker's "+ new
+  temp cluster" wizard.
+- Releases: GoReleaser builds darwin, linux and windows on amd64 and arm64
+  plus a macOS universal binary, with checksums, SBOMs, keyless cosign
+  signatures, GitHub artifact attestations, and Apple signing and
+  notarisation when the release has the certificates.

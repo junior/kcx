@@ -4,6 +4,32 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.0.0-rc.3 (2026-10-25)
+
+The picker after a day of use beside the tool it replaces, and a doctor that
+repairs what it finds. Everything listed under 2.0.0 below is in it.
+
+### Added
+
+- `kcx doctor --fix` repairs the modes of the layout's directories and files
+  and unsets a current context a cluster file sets of its own; findings of one
+  kind across many files fold into one line.
+- A profile group takes a `label`, what the picker shows for it.
+
+### Changed
+
+- Profiles keep groups and clusters in the order written, file by file; the
+  picker, `kcx fetch --all`, `--group` and `--missing`, and `kcx profile ls`
+  walk them that way.
+- The picker shows aligned columns: the browse line first, then each context
+  with its group (the label, in the group's colour), its site and a star on
+  the current one. The drill-down marks fetched clusters with a check mark,
+  names its steps in short headers, and q quits from any step while ESC steps
+  back. A group's `color` must be one of red, green, yellow, blue, magenta,
+  cyan and white; `NO_COLOR` turns colours off.
+- The example profile's clusters are prod1, prod2, prod3, office2-lab and
+  office7-lab, at the sites austin, atlanta and bastrop.
+
 ## 2.0.0-rc.2 (2026-10-25)
 
 A pre-release for the author's own tests on every kind of machine, through the
@@ -35,7 +61,7 @@ writes a Sigstore bundle.)
   `probe`, `picker`, `trash`; an unknown key is an error, not a default.
 - Profiles in `~/.config/kcx/profiles/*.toml` (`KCX_PROFILES` overrides):
   providers (a command template with `{name}`, `{host}`, `{user}`, `{out}`,
-  `{env.VAR}`), groups (provider, colour, read-only default) and clusters
+  `{env.VAR}`), groups (provider, label, colour, read-only default) and clusters
   (group, site, aliases, overrides); merged in order, a name defined twice is
   an error; `kcx profile ls|check`.
 - `kcx fetch NAME... | --all | --group G | --missing [-u USER] [--use]`: the

@@ -34,7 +34,7 @@ line for anything else.
 ## Commands
 
 ```
-kcx                         pick a context (fzf); the top lines fetch or make a cluster
+kcx                         pick a context (fzf); the top line browses your profiles
 kcx NAME                    switch; fetch first when NAME is only in a profile or its
                             credentials no longer work (--refresh forces)
 kcx -  |  kcx -c            previous context  |  current context
@@ -49,7 +49,8 @@ kcx temp create|ls|rm|prune|add      temp kind clusters
 kcx profile ls|check        the clusters your profiles know
 kcx secret status|refresh|forget     talk to a secret provider; never prints a secret
 kcx init | completion zsh|bash       shell integration
-kcx doctor                  check the layout, the files, the settings and the profiles
+kcx doctor [--fix]          check the layout, the files, the settings and the profiles;
+                            --fix repairs modes and stray current contexts
 ```
 
 `kcx -h` has the details.
@@ -71,12 +72,14 @@ user     = ["{env.ACME_USER}", "{env.USER}"]
 rejected = "401|access_denied"
 
 [group.production]
+label    = "Production"
 provider = "acme"
+color    = "red"
 readonly = true
 
 [cluster.prod1]
 group = "production"
-site  = "austin"
+site  = "Austin"
 ```
 
 `kcx prod1` then fetches `prod1` through the command, imports the result as
@@ -85,6 +88,14 @@ provider's `context_name = "{user}@{name}"` keeps the `user@cluster` shape
 some platforms use; `kcx add --keep-names` imports a cloud CLI's kubeconfig
 with the names the cloud gave it. The file is always `NAME.yaml`, and `kcx
 NAME` resolves by file first.
+
+`kcx` alone opens the picker over your contexts, and its top line browses the
+profiles the way they are organised: group, then site, then cluster, in the
+order the files list them (file by file, as their names sort), with a check
+mark on the clusters that have a file and a star on the current one. A group's
+`label` is what the picker shows for it, its `color` paints its rows (red,
+green, yellow, blue, magenta, cyan or white; `NO_COLOR` turns that off), and a
+site is any text. In the browse, ESC steps back and q quits.
 
 ### Secret providers
 

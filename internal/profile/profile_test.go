@@ -24,14 +24,14 @@ readonly = true
 [group.lab]
 provider = "acme"
 
-[cluster.p1]
+[cluster.prod1]
 group   = "production"
 site    = "austin"
-aliases = ["prod1"]
+aliases = ["main"]
 
-[cluster.r4-lab]
+[cluster.office2-lab]
 group = "lab"
-site  = "round-rock"
+site  = "bastrop"
 
 [cluster.odd-one]
 group    = "lab"
@@ -68,23 +68,23 @@ func TestFilesAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(set.Names(), ",") != "odd-one,p1,r4-lab,z" {
+	if strings.Join(set.Names(), ",") != "odd-one,office2-lab,prod1,z" {
 		t.Fatalf("names: %v", set.Names())
 	}
-	c, ok := set.Lookup("prod1")
-	if !ok || c.Name != "p1" {
+	c, ok := set.Lookup("main")
+	if !ok || c.Name != "prod1" {
 		t.Fatal("alias lookup")
 	}
 	if !set.Readonly(c) {
-		t.Fatal("p1 inherits readonly from production")
+		t.Fatal("prod1 inherits readonly from production")
 	}
-	if r, _ := set.Lookup("r4-lab"); set.Readonly(r) {
-		t.Fatal("r4-lab is not read-only")
+	if r, _ := set.Lookup("office2-lab"); set.Readonly(r) {
+		t.Fatal("office2-lab is not read-only")
 	}
 	if o, _ := set.Lookup("odd-one"); !set.Readonly(o) {
 		t.Fatal("odd-one sets readonly itself")
 	}
-	if strings.Join(set.InGroup("lab"), ",") != "odd-one,r4-lab" {
+	if strings.Join(set.InGroup("lab"), ",") != "odd-one,office2-lab" {
 		t.Fatalf("InGroup: %v", set.InGroup("lab"))
 	}
 	p := set.ProviderOf(c)
@@ -105,9 +105,9 @@ func TestResolveAndCommand(t *testing.T) {
 	env := func(k string) string {
 		return map[string]string{"USER": "jane"}[k]
 	}
-	c, _ := set.Lookup("p1")
+	c, _ := set.Lookup("prod1")
 	host, user, err := set.Resolve(c, "", env)
-	if err != nil || host != "p1.k8s.acme.example" || user != "svc-jane" {
+	if err != nil || host != "prod1.k8s.acme.example" || user != "svc-jane" {
 		t.Fatalf("resolve: %q %q %v", host, user, err)
 	}
 	envWith := func(k string) string {
@@ -145,7 +145,7 @@ func TestLoadRefusesMistakes(t *testing.T) {
 	dir := t.TempDir()
 	good := writeProfile(t, dir, "good.toml", acme)
 	cases := map[string]struct{ content, want string }{
-		"dup-cluster":      {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.p1]\ngroup = \"g\"\n", "cluster p1 is defined in"},
+		"dup-cluster":      {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.prod1]\ngroup = \"g\"\n", "cluster prod1 is defined in"},
 		"dup-provider":     {"[provider.acme]\ncommand = [\"t\"]\n", "provider acme is defined in"},
 		"unknown-key":      {"[provider.y]\ncommand = [\"t\"]\ncolour = \"red\"\n", "unknown key(s): provider.y.colour"},
 		"no-group":         {"[cluster.lonely]\n", "has no group"},
@@ -157,8 +157,8 @@ func TestLoadRefusesMistakes(t *testing.T) {
 		"bad-regexp":       {"[provider.k]\ncommand = [\"t\"]\nrejected = \"(\"\n", "rejected:"},
 		"bad-timeout":      {"[provider.k]\ncommand = [\"t\"]\ntimeout = \"soon\"\n", "is not a duration"},
 		"bad-name":         {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.\"bad/name\"]\ngroup = \"g\"\n", "a name takes letters"},
-		"alias-is-cluster": {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.q]\ngroup = \"g\"\naliases = [\"p1\"]\n", "alias p1 is also a cluster"},
-		"alias-dup":        {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.q]\ngroup = \"g\"\naliases = [\"prod1\"]\n", "alias prod1 points at both"},
+		"alias-is-cluster": {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.q]\ngroup = \"g\"\naliases = [\"prod1\"]\n", "alias prod1 is also a cluster"},
+		"alias-dup":        {"[provider.x]\ncommand = [\"t\"]\n[group.g]\nprovider = \"x\"\n[cluster.q]\ngroup = \"g\"\naliases = [\"main\"]\n", "alias main points at both"},
 		"template-type":    {"[provider.k]\ncommand = [\"t\"]\nhost = 3\n", "a template is a string or a list of strings"},
 		"syntax":           {"[provider.k\n", "zz-syntax.toml"},
 	}

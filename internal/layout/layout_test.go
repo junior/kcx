@@ -149,13 +149,13 @@ func TestWhereAndSplitTemp(t *testing.T) {
 	if n, e := SplitTemp(filepath.Join(l.Temp, "k3d-x.yaml")); n != "k3d-x" || e != "" {
 		t.Errorf("SplitTemp without engine: %q %q", n, e)
 	}
-	if l.PermFile("p1") != filepath.Join(l.Perm, "p1.yaml") || l.TempFile("t1", "imac") != filepath.Join(l.Temp, "t1@imac.yaml") || l.TempFile("x", "") != filepath.Join(l.Temp, "x.yaml") {
+	if l.PermFile("prod1") != filepath.Join(l.Perm, "prod1.yaml") || l.TempFile("t1", "imac") != filepath.Join(l.Temp, "t1@imac.yaml") || l.TempFile("x", "") != filepath.Join(l.Temp, "x.yaml") {
 		t.Error("PermFile/TempFile paths")
 	}
 }
 
 func TestValidNames(t *testing.T) {
-	good := []string{"p1", "r4-lab", "eks.lab_2", "A", "0", strings.Repeat("a", 63)}
+	good := []string{"prod1", "office2-lab", "eks.lab_2", "A", "0", strings.Repeat("a", 63)}
 	bad := []string{"", "-x", ".x", "_x", "a/b", "a@b", "a b", "a:b", strings.Repeat("a", 64), "caf\u00e9"}
 	for _, n := range good {
 		if !ValidName(n) {

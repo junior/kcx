@@ -74,13 +74,13 @@ rejected = "401|access_denied"
 provider = "acme"
 readonly = true
 
-[cluster.p1]
+[cluster.prod1]
 group = "production"
 site  = "austin"
 ```
 
-`kcx p1` then fetches `p1` through the command, imports the result as
-`~/.kube/configs/p1.yaml` with its entries named `p1`, and switches to it. A
+`kcx prod1` then fetches `prod1` through the command, imports the result as
+`~/.kube/configs/prod1.yaml` with its entries named `prod1`, and switches to it. A
 provider's `context_name = "{user}@{name}"` keeps the `user@cluster` shape
 some platforms use; `kcx add --keep-names` imports a cloud CLI's kubeconfig
 with the names the cloud gave it. The file is always `NAME.yaml`, and `kcx

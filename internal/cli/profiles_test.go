@@ -58,7 +58,7 @@ type profileFixture struct {
 }
 
 // withProfiles builds a sandbox with the fake command and broker on PATH, a
-// cached "good" secret, and a profile of clusters a (lab), b (lab) and p1
+// cached "good" secret, and a profile of clusters a (lab), b (lab) and prod1
 // (production, read-only); extraHost is a cluster whose host is the given
 // address, for a test server.
 func withProfiles(t *testing.T, extraHost string) *profileFixture {
@@ -103,7 +103,7 @@ group = "lab"
 aliases = ["aa"]
 [cluster.b]
 group = "lab"
-[cluster.p1]
+[cluster.prod1]
 group = "production"
 ` + extra
 	if err := os.WriteFile(filepath.Join(profiles, "acme.toml"), []byte(content), 0o600); err != nil {
@@ -145,9 +145,9 @@ func TestFetchCommands(t *testing.T) {
 	if entries, _ := os.ReadDir(e["KCX_TRASH_DIR"]); len(entries) != 0 {
 		t.Fatal("a refresh must not use the Trash")
 	}
-	// --missing fetches b and p1 but not a; --all then refreshes the three.
+	// --missing fetches b and prod1 but not a; --all then refreshes the three.
 	code, out, _ = runKcx(t, e, "fetch", "--missing")
-	if code != 0 || !strings.Contains(out, "fetched b (") || !strings.Contains(out, "fetched p1 (") || strings.Contains(out, "fetched a (") || !strings.Contains(out, "fetched 2 of 2") {
+	if code != 0 || !strings.Contains(out, "fetched b (") || !strings.Contains(out, "fetched prod1 (") || strings.Contains(out, "fetched a (") || !strings.Contains(out, "fetched 2 of 2") {
 		t.Fatalf("fetch --missing: %d %q", code, out)
 	}
 	f.attemptsAre(t, 4)
@@ -156,7 +156,7 @@ func TestFetchCommands(t *testing.T) {
 		t.Fatalf("fetch --all: %d %q", code, out)
 	}
 	code, out, _ = runKcx(t, e, "fetch", "--group", "production")
-	if code != 0 || !strings.Contains(out, "fetched p1 (") || strings.Contains(out, "fetched a (") {
+	if code != 0 || !strings.Contains(out, "fetched prod1 (") || strings.Contains(out, "fetched a (") {
 		t.Fatalf("fetch --group: %d %q", code, out)
 	}
 	if code, _, errs := runKcx(t, e, "fetch", "nope"); code != 1 || !strings.Contains(errs, "no cluster named nope in the profiles") {
@@ -215,10 +215,10 @@ func TestSwitchFetchesFromProfile(t *testing.T) {
 		t.Fatalf("kcx b: %d %q %q", code, out, errs)
 	}
 	f.attemptsAre(t, 1)
-	// p1 is read-only by default: the switch warns.
-	code, out, errs = runKcx(t, e, "p1")
-	if code != 0 || !strings.Contains(out, "switched to p1") || !strings.Contains(errs, "p1 is read-only by default (group production)") {
-		t.Fatalf("kcx p1: %d %q %q", code, out, errs)
+	// prod1 is read-only by default: the switch warns.
+	code, out, errs = runKcx(t, e, "prod1")
+	if code != 0 || !strings.Contains(out, "switched to prod1") || !strings.Contains(errs, "prod1 is read-only by default (group production)") {
+		t.Fatalf("kcx prod1: %d %q %q", code, out, errs)
 	}
 	// A second kcx b: the file exists, the probe fails (a.example does not
 	// resolve), and the switch happens anyway with a warning; no fetch.
@@ -381,14 +381,14 @@ func TestProfileAndSecretCommands(t *testing.T) {
 	f := withProfiles(t, "")
 	e := f.env
 	code, out, _ := runKcx(t, e, "profile", "ls")
-	if code != 0 || !strings.Contains(out, "NAME  GROUP       SITE  PROVIDER  FETCHED  READ-ONLY") || !strings.Contains(out, "p1    production  -     acme      -        yes") {
+	if code != 0 || !strings.Contains(out, "NAME   GROUP       SITE  PROVIDER  FETCHED  READ-ONLY") || !strings.Contains(out, "prod1  production  -     acme      -        yes") {
 		t.Fatalf("profile ls:\n%s", out)
 	}
 	if code, _, _ := runKcx(t, e, "fetch", "a"); code != 0 {
 		t.Fatal("fetch a")
 	}
 	code, out, _ = runKcx(t, e, "profile", "ls")
-	if code != 0 || !strings.Contains(out, "a     lab         -     acme      yes      -") {
+	if code != 0 || !strings.Contains(out, "a      lab         -     acme      yes      -") {
 		t.Fatalf("profile ls after fetch:\n%s", out)
 	}
 	code, out, _ = runKcx(t, e, "profile", "check")

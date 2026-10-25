@@ -143,18 +143,18 @@ func TestReadonlyRunAndShellEnv(t *testing.T) {
 func TestRunReadonlyByDefault(t *testing.T) {
 	f := withProfiles(t, "")
 	e := f.env
-	if code, _, errs := runKcx(t, e, "fetch", "p1"); code != 0 {
-		t.Fatalf("fetch p1: %d %q", code, errs)
+	if code, _, errs := runKcx(t, e, "fetch", "prod1"); code != 0 {
+		t.Fatalf("fetch prod1: %d %q", code, errs)
 	}
-	// p1 is read-only by default: run goes behind the proxy and says so.
-	code, out, errs := runKcx(t, e, "run", "p1", "--", "sh", "-c", `printf '%s|%s' "${KCX_RO-unset}" "${KCX_RUN-unset}"`)
-	if code != 0 || out != "p1 (READ-ONLY)|unset" || !strings.Contains(errs, "p1 is read-only by default (group production): running behind the read-only proxy") {
-		t.Fatalf("run p1: %d %q %q", code, out, errs)
+	// prod1 is read-only by default: run goes behind the proxy and says so.
+	code, out, errs := runKcx(t, e, "run", "prod1", "--", "sh", "-c", `printf '%s|%s' "${KCX_RO-unset}" "${KCX_RUN-unset}"`)
+	if code != 0 || out != "prod1 (READ-ONLY)|unset" || !strings.Contains(errs, "prod1 is read-only by default (group production): running behind the read-only proxy") {
+		t.Fatalf("run prod1: %d %q %q", code, out, errs)
 	}
 	// --rw runs with the real credentials.
-	code, out, _ = runKcx(t, e, "run", "p1", "--rw", "--", "sh", "-c", `printf '%s|%s' "${KCX_RO-unset}" "${KCX_RUN-unset}"`)
-	if code != 0 || out != "unset|p1" {
-		t.Fatalf("run p1 --rw: %d %q", code, out)
+	code, out, _ = runKcx(t, e, "run", "prod1", "--rw", "--", "sh", "-c", `printf '%s|%s' "${KCX_RO-unset}" "${KCX_RUN-unset}"`)
+	if code != 0 || out != "unset|prod1" {
+		t.Fatalf("run prod1 --rw: %d %q", code, out)
 	}
 	// A profile cluster without a file is fetched for the run.
 	code, out, errs = runKcx(t, e, "run", "b", "--", "sh", "-c", `printf '%s' "$KCX_RUN"`)

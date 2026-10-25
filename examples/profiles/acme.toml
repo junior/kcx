@@ -44,18 +44,18 @@ color    = "green"
 [group.cloud]
 provider = "eks"
 
-[cluster.p1]
+[cluster.prod1]
 group   = "production"
 site    = "austin"
-aliases = ["prod1"]
+aliases = ["main"]
 
-[cluster.p2]
+[cluster.prod2]
 group = "production"
 site  = "atlanta"
 
-[cluster.r4-lab]
+[cluster.office2-lab]
 group = "lab"
-site  = "round-rock"
+site  = "bastrop"
 
 [cluster.odd-one]
 group = "lab"

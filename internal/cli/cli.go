@@ -9,6 +9,7 @@ import (
 
 	"strings"
 
+	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
 )
 
@@ -88,12 +89,32 @@ func (a *App) run(args []string) error {
 	case "__complete":
 		return a.cmdComplete(args[1:])
 	case "":
-		return usagef("no command yet in this build: kcx -h")
+		return a.cmdLs(nil)
+	case "-c", "current":
+		return a.cmdCurrent()
+	case "-":
+		if len(args) != 1 {
+			return usagef("kcx - takes no arguments")
+		}
+		return a.cmdPrevious()
+	case "ls", "list":
+		return a.cmdLs(args[1:])
+	case "add":
+		return a.cmdAdd("perm", args[1:])
+	case "rm", "remove":
+		return a.cmdRm(args[1:])
+	case "mv", "rename":
+		return a.cmdMv(args[1:])
+	case "adopt":
+		return a.cmdAdopt(args[1:])
 	}
 	if strings.HasPrefix(cmd, "-") {
 		return usagef("unknown option %s", cmd)
 	}
-	return usagef("unknown command %s", cmd)
+	if len(args) != 1 {
+		return usagef("kcx NAME switches; other commands: kcx -h")
+	}
+	return a.cmdSwitch(cmd)
 }
 
 // cmdEnv prints the export line for shells other than zsh. A read-only shell's
@@ -123,9 +144,42 @@ func (a *App) cmdComplete(words []string) error {
 	if len(words) > 0 {
 		first = words[0]
 	}
+	last := ""
+	if len(words) > 0 {
+		last = words[len(words)-1]
+	}
+	switch last {
+	case "--context", "--server", "--context-name", "--user-name", "-":
+		return nil
+	}
+	names := func(dir string) {
+		for _, f := range layout.DirFiles(dir) {
+			n, _ := layout.SplitTemp(f)
+			fmt.Fprintln(a.stdout, n)
+		}
+	}
 	switch first {
 	case "":
-		for _, w := range []string{"env", "-h", "-v"} {
+		ctxs, _ := a.store().Contexts()
+		for _, c := range ctxs {
+			fmt.Fprintln(a.stdout, c)
+		}
+		for _, w := range []string{"ls", "env", "add", "rm", "mv", "adopt", "-c", "-", "-h", "-v"} {
+			fmt.Fprintln(a.stdout, w)
+		}
+	case "rm", "remove", "mv", "rename":
+		if len(words) == 1 {
+			names(a.lay.Perm)
+		}
+	case "adopt":
+		if len(words) == 1 {
+			ctxs, _ := kubeconfig.ContextsIn(a.lay.State)
+			for _, c := range ctxs {
+				fmt.Fprintln(a.stdout, c)
+			}
+		}
+	case "add":
+		for _, w := range []string{"-f", "--context", "--server", "--use", "--keep-names", "--context-name", "--user-name"} {
 			fmt.Fprintln(a.stdout, w)
 		}
 	}
@@ -139,10 +193,40 @@ func shellQuote(s string) string {
 
 const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the tools to use them.
 
+  kcx                         list the contexts (the picker comes in a later build)
+  kcx NAME                    switch to NAME: a cluster file, a context, or kind-NAME
+  kcx -                       switch to the previous context
+  kcx -c                      print the current context
+  kcx ls [-q]                 every context: where its file lives and its server
+                              (-q: names only)
   kcx env                     print the KUBECONFIG export line, for shells other than zsh
-  kcx -v                      version
-  kcx -h                      this help
 
-This is a development build of kcx 2; the commands of the design land slice by
-slice. kcx 1.0, the bash script, keeps working beside it.
+Permanent clusters, one file each in ~/.kube/configs:
+  kcx add NAME FILE           import the kubeconfig in FILE as NAME
+  kcx add NAME -              ... read from standard input
+  kcx add NAME -- CMD...      run CMD with KUBECONFIG set to a new, empty file and
+                              import what it writes there; an argument {} is replaced
+                              by that file's path, for tools with a file option
+      -f                      replace an existing NAME (the old file goes to the Trash)
+      --context CTX           the context to take, when the source holds several
+      --server URL            rewrite the cluster's server address
+      --use                   switch to NAME afterwards
+      --keep-names            keep the context and user names the source gave them
+      --context-name T        name the context from a template: {name}, {user}, {cluster}
+      --user-name T           name the user from a template
+  kcx rm NAME                 move NAME's file to the Trash
+  kcx mv OLD NEW              rename a permanent cluster
+  kcx adopt CTX [NAME]        move a context another tool wrote into ~/.kube/config
+                              into a file of its own
+
+  kcx -v                      version          kcx -h    this help
+
+Examples:
+  kcx add eks-lab -- aws eks update-kubeconfig --name lab --region us-west-2
+  kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
+  ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
+
+This is a development build of kcx 2; namespaces, profiles, fetch, the read-only
+shell, run and temp clusters land in the next builds. kcx 1.0, the bash script,
+keeps working beside it.
 `

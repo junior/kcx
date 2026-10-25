@@ -29,8 +29,9 @@ func TestVersionAndHelp(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "kcx env") {
 		t.Fatalf("-h: %d %q", code, out)
 	}
+	// A bare word is a switch attempt, so an unknown one names the missing context.
 	code, _, errs := runKcx(t, e, "bogus")
-	if code != 2 || !strings.Contains(errs, "unknown command bogus") || !strings.Contains(errs, "kcx -h") {
+	if code != 1 || !strings.Contains(errs, "no context named bogus") {
 		t.Fatalf("bogus: %d %q", code, errs)
 	}
 	code, _, errs = runKcx(t, e, "--bogus")

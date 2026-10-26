@@ -133,6 +133,17 @@ func TestReadonlyRunAndShellEnv(t *testing.T) {
 	if code, out, _ := runKcx(t, e, "-r", "alpha", "--", "sh", "-c", `test -w "$KUBECONFIG" && echo writable`); code != 0 || !strings.HasSuffix(out, "writable\n") {
 		t.Fatalf("-r kubeconfig writable: %d %q", code, out)
 	}
+	// A startup file that evaluates kcx init runs inside the read-only shell too:
+	// init prints its snippet there (whose own guard keeps the read-only
+	// KUBECONFIG) instead of a refusal, while a switch is still refused.
+	roEnv := env{"HOME": e["HOME"], EnvRO: "alpha (READ-ONLY)", EnvROConfig: l.PermFile("alpha"), "KUBECONFIG": l.PermFile("alpha")}
+	code, out, errs = runKcx(t, roEnv, "init", "zsh")
+	if code != 0 || !strings.Contains(out, "_kcx_kubeconfig_env()") || errs != "" {
+		t.Fatalf("init inside a read-only shell: %d %q %q", code, out, errs)
+	}
+	if code, _, errs := runKcx(t, roEnv, "alpha"); code != 1 || !strings.Contains(errs, "only kcx ls, env, init, completion, -c and ns work here") {
+		t.Fatalf("switch inside a read-only shell: %d %q", code, errs)
+	}
 	if code, _, _ := runKcx(t, e, "-r", "alpha", "--", "sh", "-c", "exit 7"); code != 7 {
 		t.Fatalf("exit code through -r: %d", code)
 	}

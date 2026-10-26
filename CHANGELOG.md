@@ -4,6 +4,15 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.0.0-rc.5 (2026-10-25)
+
+### Fixed
+
+- `kcx init` and `kcx completion` work inside a read-only shell. A startup
+  file that evaluates `kcx init zsh` runs in that shell too, and the refusal
+  it got made Powerlevel10k's instant prompt warn about console output during
+  initialisation. The snippet keeps the read-only `KUBECONFIG` on its own.
+
 ## 2.0.0-rc.4 (2026-10-25)
 
 Two things the second day of use asked for.

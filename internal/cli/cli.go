@@ -79,9 +79,12 @@ func (a *App) run(args []string) error {
 	}
 	if a.getenv(EnvRO) != "" {
 		switch cmd {
-		case "", "ls", "list", "env", "-c", "current", "ns", "__complete", "-h", "--help", "help", "-v", "--version":
+		// init and completion only print shell snippets, and a startup file that
+		// evaluates them runs inside this shell too: the snippet's own guard keeps
+		// the read-only KUBECONFIG.
+		case "", "ls", "list", "env", "init", "completion", "-c", "current", "ns", "__complete", "-h", "--help", "help", "-v", "--version":
 		default:
-			return fmt.Errorf("this is a READ-ONLY shell for %s: only kcx ls, env, -c and ns work here; exit it first", a.getenv(EnvRO))
+			return fmt.Errorf("this is a READ-ONLY shell for %s: only kcx ls, env, init, completion, -c and ns work here; exit it first", a.getenv(EnvRO))
 		}
 	}
 	switch cmd {

@@ -4,6 +4,18 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.0.1 (2026-10-26)
+
+### Fixed
+
+- `kcx NAME` fetches again when the probe fails in the credential layer
+  itself, not only on a 401: a refresh token the platform has rotated or
+  revoked ("failed to refresh token: oauth2: ..."), or a credential plugin that
+  failed. Before, such a failure counted as "did not answer the probe" and kcx
+  switched anyway, to a context kubectl could not use. When the fetch fails
+  too, the error reports both failures. A refresh that works still needs no
+  fetch.
+
 ## 2.0.0 (2026-10-25)
 
 The first release of the rewrite, after five candidates tested on the author's

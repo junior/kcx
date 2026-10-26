@@ -151,7 +151,16 @@ func TestListExistsProbe(t *testing.T) {
 	l := lay(t)
 	writeCluster(t, l.PermFile("alpha"), "alpha", srv.URL)
 	writeCluster(t, l.PermFile("bad"), "bad", srv.URL) // its token is refused
+	// A credential plugin that fails: the credential layer stops the request
+	// before it leaves, which is a reason to fetch again, like a 401.
+	broken := "apiVersion: v1\nkind: Config\nclusters:\n- name: broken\n  cluster:\n    server: " + srv.URL + "\n    insecure-skip-tls-verify: true\nusers:\n- name: broken\n  user:\n    exec:\n      apiVersion: client.authentication.k8s.io/v1\n      command: /nonexistent/kcx-test-credential-plugin\n      interactiveMode: Never\ncontexts:\n- name: broken\n  context:\n    cluster: broken\n    user: broken\n"
+	if err := os.WriteFile(l.PermFile("broken"), []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	files := l.Files()
+	if r, err := Probe(context.Background(), files, "broken", 5*time.Second); r != ProbeCredentials || err == nil || !strings.Contains(err.Error(), "getting credentials") || strings.Contains(err.Error(), "/version") {
+		t.Fatalf("Probe with a failing credential plugin: %v %v", r, err)
+	}
 	ctx := context.Background()
 	got, err := List(ctx, files, "alpha", 5*time.Second)
 	if err != nil || strings.Join(got, ",") != "default,kube-system" {

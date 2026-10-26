@@ -11,7 +11,25 @@ import (
 
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// brokenUser gives every user of a kubeconfig file a credential plugin that
+// fails, so a request through it dies in the credential layer.
+func brokenUser(t *testing.T, path string) {
+	t.Helper()
+	cfg, err := kubeconfig.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range cfg.AuthInfos {
+		u.Token = ""
+		u.Exec = &clientcmdapi.ExecConfig{APIVersion: "client.authentication.k8s.io/v1", Command: "/nonexistent/kcx-test-credential-plugin", InteractiveMode: clientcmdapi.NeverExecInteractiveMode}
+	}
+	if err := kubeconfig.WriteFile(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // The fake platform command: reads the password on stdin, counts attempts,
 // writes a kubeconfig for the right password, answers 401 for a wrong one. The
@@ -236,6 +254,29 @@ func TestSwitchFetchesFromProfile(t *testing.T) {
 	code, _, errs = runKcx(t, e, "b", "--no-probe")
 	if code != 0 || strings.Contains(errs, "probe") {
 		t.Fatalf("kcx b --no-probe: %d %q", code, errs)
+	}
+	// The credential layer failing (a refresh token the platform revoked, a
+	// credential plugin that failed) is what a fresh fetch repairs, as a 401 is.
+	brokenUser(t, l.PermFile("b"))
+	code, out, errs = runKcx(t, e, "b")
+	if code != 0 || !strings.Contains(out, "the credentials of b failed (getting credentials:") || !strings.Contains(out, "fetched b (") || !strings.Contains(out, "switched to b") {
+		t.Fatalf("kcx b with a failing credential plugin: %d %q %q", code, out, errs)
+	}
+	f.attemptsAre(t, 4)
+	// When the fetch fails too, the error reports both failures.
+	brokenUser(t, l.PermFile("b"))
+	if err := os.WriteFile(f.cache, []byte("bad"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errs = runKcx(t, e, "b")
+	if code != 1 || !strings.Contains(errs, "b: the credentials failed (getting credentials:") || !strings.Contains(errs, "and fetching again failed:") {
+		t.Fatalf("kcx b with both failing: %d %q", code, errs)
+	}
+	if err := os.WriteFile(f.cache, []byte("good"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := runKcx(t, e, "b"); code != 0 || !strings.Contains(out, "fetched b (") {
+		t.Fatalf("kcx b after the secret is back: %d %q %q", code, out, errs)
 	}
 	// A plain cluster (alpha, not in any profile) switches with no probe and no fetch.
 	code, out, errs = runKcx(t, e, "alpha")

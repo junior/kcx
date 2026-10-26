@@ -212,14 +212,21 @@ func (a *App) switchTo(name, user string, refresh, noProbe bool) error {
 		return nil
 	}
 	needFetch := refresh || resolveErr != nil
+	var probeErr error
 	if !needFetch && !noProbe {
 		if s, err := a.settings(); err == nil && s.Probe {
 			switch r, err := ns.Probe(context.Background(), a.lay.Files(), ctx, probeTimeout); {
-			case err != nil || r == ns.ProbeUnreachable:
-				a.warn("%s did not answer the probe (%v); switching anyway", c.Name, err)
 			case r == ns.ProbeUnauthorized:
 				a.say("the credentials of %s no longer work; fetching", c.Name)
 				needFetch = true
+			case r == ns.ProbeCredentials:
+				// A refresh token the platform rotated or revoked, or a credential
+				// plugin that failed: what a fresh fetch repairs, as a 401 is. A
+				// refresh that works never gets here.
+				a.say("the credentials of %s failed (%v); fetching", c.Name, err)
+				needFetch, probeErr = true, err
+			case err != nil || r == ns.ProbeUnreachable:
+				a.warn("%s did not answer the probe (%v); switching anyway", c.Name, err)
 			}
 		}
 	}
@@ -227,6 +234,9 @@ func (a *App) switchTo(name, user string, refresh, noProbe bool) error {
 		var err error
 		ctx, err = a.fetchCluster(set, c, user)
 		if err != nil {
+			if probeErr != nil {
+				return fmt.Errorf("%s: the credentials failed (%v) and fetching again failed: %w", c.Name, probeErr, err)
+			}
 			return err
 		}
 	}

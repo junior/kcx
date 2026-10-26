@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -190,12 +191,14 @@ type ProbeResult int
 const (
 	ProbeOK           ProbeResult = iota // the credentials work
 	ProbeUnauthorized                    // 401: the login is gone
+	ProbeCredentials                     // the credential layer failed before the request left (see credentialFailure)
 	ProbeUnreachable                     // no answer, or an answer that says nothing about the login
 )
 
 // Probe makes one cheap authenticated request (GET /version) as context name.
-// A 401 means the credentials no longer work; a network failure or any other
-// status says nothing about them.
+// A 401 means the credentials no longer work, and so does a failure of the
+// credential layer itself; a network failure or any other status says nothing
+// about them.
 func Probe(ctx context.Context, files []string, name string, timeout time.Duration) (ProbeResult, error) {
 	client, host, err := Client(files, name, timeout)
 	if err != nil {
@@ -207,6 +210,13 @@ func Probe(ctx context.Context, files []string, name string, timeout time.Durati
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if credentialFailure(err) {
+			var ue *url.Error
+			if errors.As(err, &ue) {
+				err = ue.Err // the reason, without the request it stopped
+			}
+			return ProbeCredentials, err
+		}
 		return ProbeUnreachable, err
 	}
 	defer resp.Body.Close()
@@ -215,4 +225,19 @@ func Probe(ctx context.Context, files []string, name string, timeout time.Durati
 		return ProbeUnauthorized, nil
 	}
 	return ProbeOK, nil
+}
+
+// credentialFailure recognises an error the credential layer raised before the
+// request left the machine, so that a fresh fetch is the answer, as it is for a
+// 401: client-go's OIDC provider refreshing a token the platform has rotated or
+// revoked ("failed to refresh token: oauth2: ..."), or a credential plugin that
+// failed ("getting credentials: exec: ..."). The texts are client-go's.
+func credentialFailure(err error) bool {
+	s := err.Error()
+	for _, mark := range []string{"failed to refresh token", "oauth2:", "getting credentials", "exec plugin", "credential plugin"} {
+		if strings.Contains(s, mark) {
+			return true
+		}
+	}
+	return false
 }

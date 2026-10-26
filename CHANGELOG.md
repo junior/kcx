@@ -4,6 +4,19 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.0.0-rc.4 (2026-10-25)
+
+Two things the second day of use asked for.
+
+### Changed
+
+- `kcx ns` works inside a read-only shell: the shell's own kubeconfig, which
+  holds no credentials, is now writable by its owner, and the namespace change
+  stays in the shell. Before, the file's mode refused the write.
+- `kcx -h` is grouped under headings and, on a terminal, coloured: headings in
+  bold, commands in cyan, options in yellow; plain when `NO_COLOR` is set or
+  the output is not a terminal.
+
 ## 2.0.0-rc.3 (2026-10-25)
 
 The picker after a day of use beside the tool it replaces, and a doctor that

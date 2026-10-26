@@ -86,7 +86,7 @@ func (a *App) run(args []string) error {
 	}
 	switch cmd {
 	case "-h", "--help", "help":
-		fmt.Fprint(a.stdout, usageText)
+		fmt.Fprint(a.stdout, a.helpText())
 		return nil
 	case "-v", "--version":
 		fmt.Fprintf(a.stdout, "kcx %s\n", version)
@@ -313,94 +313,3 @@ func (a *App) cmdComplete(words []string) error {
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
-
-const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the tools to use them.
-
-  kcx                         pick a context (fzf); the top line fetches a profile cluster
-  kcx NAME [-u USER]          switch to NAME: a cluster file, a context, kind-NAME, or a
-                              profile cluster, fetched first when its file is missing or
-                              its credentials no longer work (--refresh: fetch regardless;
-                              --no-probe: do not check them)
-  kcx -                       switch to the previous context
-  kcx -c                      print the current context
-  kcx ls [-q]                 every context: where its file lives and its server
-                              (-q: names only)
-  kcx ns [NAME|-|-c]          switch the current context's namespace, go back, or print
-                              it; without an argument, list the cluster's namespaces
-      --force                 set it without asking the cluster whether it exists
-  kcx env                     print the KUBECONFIG export line, for shells other than zsh
-  kcx run NAME [-n NS] -- CMD...
-                              run one command against NAME, the shared current context
-                              untouched: what agents should use. A switch or a namespace
-                              change inside stays inside. A cluster that is read-only by
-                              default runs behind the read-only proxy unless --rw
-  kcx -r [NAME] [-n NS] [-- CMD...]
-                              a read-only shell for NAME, or one read-only command: a
-                              local proxy refuses writes, exec, attach, port-forward and
-                              cp before they leave the machine; auth can-i still works
-  kcx init zsh|bash           the shell snippet: eval "$(kcx init zsh)" keeps KUBECONFIG
-                              in step and installs completion
-  kcx completion zsh|bash     the completion part alone
-  kcx doctor [--fix]          check the layout, the files, the settings, the profiles
-                              and the programs kcx relies on; --fix first repairs the
-                              modes and a current context a cluster file sets of its own
-
-Profiles, ~/.config/kcx/profiles/*.toml (KCX_PROFILES overrides): the clusters a
-machine may fetch, in groups, each through a provider command and a secret provider.
-kcx ships none; kcx profile check validates yours.
-  kcx fetch NAME...           fetch these clusters' kubeconfigs (a refresh when the file exists)
-  kcx fetch --all             every profile cluster that has a file, current context kept
-  kcx fetch --group G         every cluster of group G
-  kcx fetch --missing         every profile cluster without a file
-      -u USER                 the user, instead of the profile's template
-      --use                   switch afterwards (one cluster)
-  kcx profile ls              the clusters the profiles know, and which are fetched
-  kcx profile check           read the profiles and report mistakes
-  kcx secret status|refresh|forget [PROVIDER]
-                              talk to a secret provider; never prints a secret
-
-Permanent clusters, one file each in ~/.kube/configs:
-  kcx add NAME FILE           import the kubeconfig in FILE as NAME
-  kcx add NAME -              ... read from standard input
-  kcx add NAME -- CMD...      run CMD with KUBECONFIG set to a new, empty file and
-                              import what it writes there; an argument {} is replaced
-                              by that file's path, for tools with a file option
-      -f                      replace an existing NAME (the old file goes to the Trash)
-      --context CTX           the context to take, when the source holds several
-      --server URL            rewrite the cluster's server address
-      --use                   switch to NAME afterwards
-      --keep-names            keep the context and user names the source gave them
-      --context-name T        name the context from a template: {name}, {user}, {cluster}
-      --user-name T           name the user from a template
-  kcx rm NAME                 move NAME's file to the Trash
-  kcx mv OLD NEW              rename a permanent cluster
-  kcx adopt CTX [NAME]        move a context another tool wrote into ~/.kube/config
-                              into a file of its own
-
-Temp clusters, kind, one file each in ~/.kube/temp:
-  kcx temp create NAME [--engine DOCKER_CONTEXT] [--config PRESET|FILE] [--use] [-- KIND_ARGS...]
-                              DOCKER_CONTEXT: the engine to run on (default: docker's
-                              current one); on a remote engine the API server listens
-                              on the engine's network address. PRESET: a file in
-                              ~/.config/kind; without --config, kind's own one-node
-                              cluster. The context is kind-NAME.
-  kcx temp ls                 temp clusters, and whether each still exists
-  kcx temp rm NAME            delete the cluster and its kubeconfig
-  kcx temp prune              delete the kubeconfigs of clusters that are gone
-  kcx temp add NAME FILE|-|-- CMD...
-                              keep another tool's temp cluster (k3d, minikube) here
-
-  kcx -v                      version          kcx -h    this help
-
-Agents: every shell shares one current context, so a switch in one session points
-kubectl in all the others at another cluster. Name the cluster per command,
-kubectl --context NAME or kcx run NAME -- CMD, and use kcx -r for anything that only
-reads.
-
-Examples:
-  kcx add eks-lab -- aws eks update-kubeconfig --name lab --region us-west-2
-  kcx add oke-lab -- oci ce cluster create-kubeconfig --cluster-id ID --file {}
-  ssh pi sudo cat /etc/rancher/k3s/k3s.yaml | kcx add pi - --server https://pi.lan:6443
-  kcx temp create t1 --engine lab --config calico
-  kcx run kind-t1 -- kubectl get nodes
-`

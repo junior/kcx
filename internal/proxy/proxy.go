@@ -30,7 +30,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -218,7 +217,9 @@ func writeStatus(w http.ResponseWriter, code int, reason metav1.StatusReason, me
 func ReadonlyContext(name string) string { return name + " (READ-ONLY)" }
 
 // WriteKubeconfig writes the kubeconfig the read-only shell uses: no credentials,
-// one cluster pointing at the proxy, the context renamed. Mode 0400.
+// one cluster pointing at the proxy, the context renamed. Mode 0600, so that a
+// namespace change inside the shell (kcx ns, or kubectl config) lands in this
+// file and nowhere else; there is nothing in it to protect.
 func WriteKubeconfig(path, name, addr string) error {
 	cfg := clientcmdapi.NewConfig()
 	cfg.Clusters["readonly"] = &clientcmdapi.Cluster{Server: "http://" + addr}
@@ -230,8 +231,5 @@ func WriteKubeconfig(path, name, addr string) error {
 	if err != nil {
 		return err
 	}
-	if err := layout.WriteFileAtomic(path, data, 0o600); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o400)
+	return layout.WriteFileAtomic(path, data, 0o600)
 }

@@ -189,7 +189,6 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 	}
 	roctx := proxy.ReadonlyContext(ctx)
 	if namespace != "" {
-		_ = os.Chmod(ro, 0o600)
 		cfg, err := kubeconfig.LoadFile(ro)
 		if err != nil {
 			return err
@@ -198,7 +197,6 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 		if err := kubeconfig.WriteFile(ro, cfg); err != nil {
 			return err
 		}
-		_ = os.Chmod(ro, 0o400)
 	}
 	// KCX_RO keeps it read-only through the shell's own startup files: the init
 	// snippet and `kcx env` leave this KUBECONFIG alone, and kcx itself refuses

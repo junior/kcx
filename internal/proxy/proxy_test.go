@@ -157,7 +157,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, _ := os.Stat(ro)
-	if info.Mode().Perm() != 0o400 {
+	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	cfg, err := clientcmd.LoadFromFile(ro)

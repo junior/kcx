@@ -128,6 +128,11 @@ func TestReadonlyRunAndShellEnv(t *testing.T) {
 		t.Fatalf("-r -n: %d %q", code, out)
 	}
 	// The exit status comes through; without a name and without a terminal, a usage error.
+	// The shell's kubeconfig is the owner's to write, so a namespace change made
+	// inside the shell lands there and nowhere else.
+	if code, out, _ := runKcx(t, e, "-r", "alpha", "--", "sh", "-c", `test -w "$KUBECONFIG" && echo writable`); code != 0 || !strings.HasSuffix(out, "writable\n") {
+		t.Fatalf("-r kubeconfig writable: %d %q", code, out)
+	}
 	if code, _, _ := runKcx(t, e, "-r", "alpha", "--", "sh", "-c", "exit 7"); code != 7 {
 		t.Fatalf("exit code through -r: %d", code)
 	}

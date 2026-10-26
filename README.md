@@ -12,11 +12,13 @@ scripts standing in for the platform's command and its secret provider; every
 name in it is made up. [.github/demo.tape](.github/demo.tape) and
 [.github/demo-setup.sh](.github/demo-setup.sh) regenerate it.
 
-**Status: pre-release.** This is the Go rewrite (2.0) of a bash tool that
-lived in the author's dotfiles. The 2.0.0 release candidates are published
-with attested binaries for macOS, Linux and Windows on amd64 and arm64, which
-mise's GitHub backend installs; 2.0.0 itself, a Homebrew tap formula and
-notarised macOS binaries follow the author's usability pass.
+**Status: released.** 2.0.0 is the Go rewrite of a bash tool that lived in the
+author's dotfiles. Each release carries binaries for macOS, Linux and Windows on
+amd64 and arm64, with an SBOM per archive, cosign-signed checksums and GitHub
+build provenance. Install it with Homebrew, built from source
+(`brew install junior/tap/kcx`), with mise from the release
+(`mise use -g github:junior/kcx@latest`, which verifies the attestation), or
+take an archive from the release page. Notarised macOS binaries come later.
 
 ## Why
 

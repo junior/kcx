@@ -4,62 +4,13 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
-## 2.0.0-rc.5 (2026-10-25)
+## 2.0.0 (2026-10-25)
 
-### Fixed
-
-- `kcx init` and `kcx completion` work inside a read-only shell. A startup
-  file that evaluates `kcx init zsh` runs in that shell too, and the refusal
-  it got made Powerlevel10k's instant prompt warn about console output during
-  initialisation. The snippet keeps the read-only `KUBECONFIG` on its own.
-
-## 2.0.0-rc.4 (2026-10-25)
-
-Two things the second day of use asked for.
-
-### Changed
-
-- `kcx ns` works inside a read-only shell: the shell's own kubeconfig, which
-  holds no credentials, is now writable by its owner, and the namespace change
-  stays in the shell. Before, the file's mode refused the write.
-- `kcx -h` is grouped under headings and, on a terminal, coloured: headings in
-  bold, commands in cyan, options in yellow; plain when `NO_COLOR` is set or
-  the output is not a terminal.
-
-## 2.0.0-rc.3 (2026-10-25)
-
-The picker after a day of use beside the tool it replaces, and a doctor that
-repairs what it finds. Everything listed under 2.0.0 below is in it.
-
-### Added
-
-- `kcx doctor --fix` repairs the modes of the layout's directories and files
-  and unsets a current context a cluster file sets of its own; findings of one
-  kind across many files fold into one line.
-- A profile group takes a `label`, what the picker shows for it.
-
-### Changed
-
-- Profiles keep groups and clusters in the order written, file by file; the
-  picker, `kcx fetch --all`, `--group` and `--missing`, and `kcx profile ls`
-  walk them that way.
-- The picker shows aligned columns: the browse line first, then each context
-  with its group (the label, in the group's colour), its site and a star on
-  the current one. The drill-down marks fetched clusters with a check mark,
-  names its steps in short headers, and q quits from any step while ESC steps
-  back. A group's `color` must be one of red, green, yellow, blue, magenta,
-  cyan and white; `NO_COLOR` turns colours off.
-- The example profile's clusters are prod1, prod2, prod3, office2-lab and
-  office7-lab, at the sites austin, atlanta and bastrop.
-
-## 2.0.0-rc.2 (2026-10-25)
-
-A pre-release for the author's own tests on every kind of machine, through the
-channels 2.0.0 will use. Everything listed under 2.0.0 below is in it. (rc.1
-was never published: its release job stopped at the cosign step, which now
-writes a Sigstore bundle.)
-
-## Unreleased: 2.0.0
+The first release of the rewrite, after five candidates tested on the author's
+Mac, work laptop and lab node; their sections below say what each brought.
+Install: `brew install junior/tap/kcx` (built from source), `mise use -g
+github:junior/kcx@latest` (the release binary, its attestation verified), or an
+archive from the release page.
 
 ### Added
 
@@ -144,3 +95,66 @@ writes a Sigstore bundle.)
   plus a macOS universal binary, with checksums, SBOMs, keyless cosign
   signatures, GitHub artifact attestations, and Apple signing and
   notarisation when the release has the certificates.
+- Since the first candidate: profiles keep groups and clusters in the order
+  written, and a group takes a `label` (what the picker shows) and one of seven
+  colour names; the picker shows aligned columns in the groups' colours, the
+  browse line first, and the drill-down marks fetched and current clusters,
+  ESC stepping back and q quitting; `kcx doctor --fix` repairs modes and a
+  cluster file's own current context, and same-cause findings fold into one
+  line; `kcx -h` is grouped under headings and coloured on a terminal; `kcx
+  ns`, `kcx init` and `kcx completion` work inside a read-only shell.
+
+## 2.0.0-rc.5 (2026-10-25)
+
+### Fixed
+
+- `kcx init` and `kcx completion` work inside a read-only shell. A startup
+  file that evaluates `kcx init zsh` runs in that shell too, and the refusal
+  it got made Powerlevel10k's instant prompt warn about console output during
+  initialisation. The snippet keeps the read-only `KUBECONFIG` on its own.
+
+## 2.0.0-rc.4 (2026-10-25)
+
+Two things the second day of use asked for.
+
+### Changed
+
+- `kcx ns` works inside a read-only shell: the shell's own kubeconfig, which
+  holds no credentials, is now writable by its owner, and the namespace change
+  stays in the shell. Before, the file's mode refused the write.
+- `kcx -h` is grouped under headings and, on a terminal, coloured: headings in
+  bold, commands in cyan, options in yellow; plain when `NO_COLOR` is set or
+  the output is not a terminal.
+
+## 2.0.0-rc.3 (2026-10-25)
+
+The picker after a day of use beside the tool it replaces, and a doctor that
+repairs what it finds. Everything listed under 2.0.0 above is in it.
+
+### Added
+
+- `kcx doctor --fix` repairs the modes of the layout's directories and files
+  and unsets a current context a cluster file sets of its own; findings of one
+  kind across many files fold into one line.
+- A profile group takes a `label`, what the picker shows for it.
+
+### Changed
+
+- Profiles keep groups and clusters in the order written, file by file; the
+  picker, `kcx fetch --all`, `--group` and `--missing`, and `kcx profile ls`
+  walk them that way.
+- The picker shows aligned columns: the browse line first, then each context
+  with its group (the label, in the group's colour), its site and a star on
+  the current one. The drill-down marks fetched clusters with a check mark,
+  names its steps in short headers, and q quits from any step while ESC steps
+  back. A group's `color` must be one of red, green, yellow, blue, magenta,
+  cyan and white; `NO_COLOR` turns colours off.
+- The example profile's clusters are prod1, prod2, prod3, office2-lab and
+  office7-lab, at the sites austin, atlanta and bastrop.
+
+## 2.0.0-rc.2 (2026-10-25)
+
+A pre-release for the author's own tests on every kind of machine, through the
+channels 2.0.0 will use. Everything listed under 2.0.0 above is in it. (rc.1
+was never published: its release job stopped at the cosign step, which now
+writes a Sigstore bundle.)

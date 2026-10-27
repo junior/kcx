@@ -82,15 +82,45 @@ esac
 EOF
 chmod 755 "$home/bin/acme" "$home/bin/acme-secret"
 
-# The shell the recording types into.
-cat > "$home/.zshrc" <<'EOF'
-setopt interactivecomments
-PROMPT='%F{cyan}$%f '
-export PATH=/tmp/demo/bin:$PATH
-export ACME_USER=jane
-unset KUBECONFIG KCX_AUTO
-eval "$(kcx init zsh)"
+# The prompt: Powerlevel10k in its pure style (its own preset), with the kube
+# context added at the right of the first line, which the preset leaves out:
+# the cluster in its group's colour (production red, lab green), and the
+# namespace when it is not default. Powerlevel10k matches the colour classes
+# against "context/namespace", hence the star at the end of each pattern. The
+# icon needs a Nerd Font, and its non-Mono variant draws it full size.
+# Powerlevel10k comes from P10K_DIR, from Homebrew, or from a shallow clone.
+p10k=""
+for d in "${P10K_DIR:-}" "$(brew --prefix 2>/dev/null)/share/powerlevel10k" "$home/powerlevel10k"; do
+  if [ -n "$d" ] && [ -f "$d/powerlevel10k.zsh-theme" ]; then p10k=$d; break; fi
+done
+if [ -z "$p10k" ]; then
+  git clone -q --depth 1 https://github.com/romkatv/powerlevel10k "$home/powerlevel10k"
+  p10k=$home/powerlevel10k
+fi
+cp "$p10k/config/p10k-pure.zsh" "$home/.p10k.zsh"
+cat >> "$home/.p10k.zsh" <<'EOF'
+
+# The demo's additions to the pure preset.
+typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir command_execution_time newline prompt_char)
+typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(kubecontext newline)
+typeset -g POWERLEVEL9K_KUBECONTEXT_CLASSES=('*READ-ONLY*' RO 'prod*' PROD '*-lab*' LAB '*' DEFAULT)
+typeset -g POWERLEVEL9K_KUBECONTEXT_{RO,PROD}_FOREGROUND=1
+typeset -g POWERLEVEL9K_KUBECONTEXT_LAB_FOREGROUND=2
+typeset -g POWERLEVEL9K_KUBECONTEXT_DEFAULT_FOREGROUND=5
+typeset -g POWERLEVEL9K_KUBECONTEXT_{RO,PROD,LAB,DEFAULT}_VISUAL_IDENTIFIER_EXPANSION=$'\U000F10FE'
+typeset -g POWERLEVEL9K_KUBECONTEXT_CONTENT_EXPANSION='${P9K_KUBECONTEXT_NAME}${${:-/$P9K_KUBECONTEXT_NAMESPACE}:#/default}'
+typeset -g POWERLEVEL9K_TRANSIENT_PROMPT=always
+typeset -g POWERLEVEL9K_INSTANT_PROMPT=off
+typeset -g POWERLEVEL9K_DISABLE_GITSTATUS=true
 EOF
+
+# The shell the recording types into.
+{
+  printf '%s\n' 'setopt interactivecomments' 'export PATH=/tmp/demo/bin:$PATH' 'export ACME_USER=jane' \
+    'unset KUBECONFIG KCX_AUTO' 'eval "$(kcx init zsh)"'
+  printf 'source %s/powerlevel10k.zsh-theme\n' "$p10k"
+  printf '%s\n' 'source ~/.p10k.zsh'
+} > "$home/.zshrc"
 
 # The cluster behind every name in the profile.
 if ! kind get clusters 2>/dev/null | grep -qx kcx-demo; then

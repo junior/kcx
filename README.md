@@ -9,8 +9,9 @@ for AI tools, and temp kind clusters on any Docker engine.
 
 The recording runs the example profile against a kind cluster, with two small
 scripts standing in for the platform's command and its secret provider; every
-name in it is made up. [.github/demo.tape](.github/demo.tape) and
-[.github/demo-setup.sh](.github/demo-setup.sh) regenerate it.
+name in it is made up. The prompt is Powerlevel10k in its pure style, with the
+current cluster added in its group's colour. [.github/demo.tape](.github/demo.tape)
+and [.github/demo-setup.sh](.github/demo-setup.sh) regenerate it.
 
 **Status: released.** 2.0.0 is the Go rewrite of a bash tool that lived in the
 author's dotfiles. Each release carries binaries for macOS, Linux and Windows on

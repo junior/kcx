@@ -47,3 +47,38 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
+
+  # The Homebrew tap follows a full release: the from-source formula in
+  # junior/homebrew-tap gets this tag and its source tarball's checksum, committed
+  # and pushed with HOMEBREW_TAP_TOKEN, a fine-grained token with read and write
+  # access to the contents of that one repository, kept as a secret here. A
+  # pre-release tag (a hyphen in its name) leaves the tap alone. Without the
+  # secret this job fails and the release above stands.
+  tap:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: junior/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Point the formula at this release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          url="https://github.com/junior/kcx/archive/refs/tags/${TAG}.tar.gz"
+          sha=$(curl -sSfL "$url" | sha256sum | cut -d' ' -f1)
+          sed -i -e "s|/archive/refs/tags/v[^\"]*\.tar\.gz|/archive/refs/tags/${TAG}.tar.gz|" \
+                 -e "s|sha256 \"[0-9a-f]\{64\}\"|sha256 \"${sha}\"|" Formula/kcx.rb
+          if git diff --quiet; then
+            echo "the formula already points at ${TAG}"
+            exit 0
+          fi
+          git config user.name "junior"
+          git config user.email "junior@users.noreply.github.com"
+          git commit -am "kcx ${TAG#v}"
+          git push

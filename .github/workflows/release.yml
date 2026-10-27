@@ -71,7 +71,12 @@ jobs:
         run: |
           set -eu
           url="https://github.com/junior/kcx/archive/refs/tags/${TAG}.tar.gz"
-          sha=$(curl -sSfL "$url" | sha256sum | cut -d' ' -f1)
+          for attempt in 1 2 3 4 5 6; do
+            curl -sSfL -o /tmp/src.tar.gz "$url" && break
+            [ "$attempt" -lt 6 ] || { echo "no tarball at ${url}" >&2; exit 1; }
+            sleep 10
+          done
+          sha=$(sha256sum /tmp/src.tar.gz | cut -d' ' -f1)
           sed -i -e "s|/archive/refs/tags/v[^\"]*\.tar\.gz|/archive/refs/tags/${TAG}.tar.gz|" \
                  -e "s|sha256 \"[0-9a-f]\{64\}\"|sha256 \"${sha}\"|" Formula/kcx.rb
           if git diff --quiet; then

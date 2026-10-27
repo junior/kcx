@@ -52,6 +52,7 @@ kcx ns [NAME|-|-c]          namespace: switch, go back, print; a picker without 
 kcx ls [-q]                 every context, where its file lives, its server, and what
                             kubectl would quietly get wrong
 kcx run NAME [-n NS] -- CMD one command against one cluster, the shared context untouched
+kcx shell [NAME] [-n NS]    a shell of its own: switches and namespaces inside stay inside
 kcx -r [NAME] [-- CMD]      a read-only shell, or one read-only command
 kcx fetch NAME... | --all | --group G | --missing
 kcx add | rm | mv | adopt   permanent clusters: import, Trash, rename, adopt
@@ -134,13 +135,24 @@ as an error naming kcx. A group with `readonly = true` makes `kcx run` use the
 proxy unless `--rw`. Accident-proof, not adversary-proof: anything running as
 you can read the real files and bypass it with `--kubeconfig`.
 
+## One shell, one cluster
+
+Every shell shares one current context, so a switch made in one terminal points
+kubectl in all the others at another cluster. `kcx shell NAME` opens a shell of
+its own instead: a private kubeconfig comes first in its `KUBECONFIG`, holding
+a copy of each context (names only, never credentials) and the shell's current
+one. `kcx NAME`, `kcx -`, `kcx ns`, the picker and kubectl's own `config
+use-context` or `set-context` inside it change that file and nothing else; the
+prompt and `kcx -c` show the shell's context; `exit` drops it all. A cluster
+that is read-only by default opens a read-only shell unless `--rw`. A shell
+another tool's startup file has pointed elsewhere gets its own `KUBECONFIG`
+back at the first prompt.
+
 ## Agents
 
-Every shell shares one current context, so a switch made in one session points
-kubectl in all the others at another cluster. Agents name the cluster per
-command, `kubectl --context NAME` or `kcx run NAME -- CMD`, and use `kcx -r
-NAME -- CMD` for anything that only reads. A switch or a namespace change
-inside `kcx run` stays inside it.
+Agents name the cluster per command, `kubectl --context NAME` or `kcx run NAME
+-- CMD`, and use `kcx -r NAME -- CMD` for anything that only reads. A switch or
+a namespace change inside `kcx run` stays inside it.
 
 ## Settings
 

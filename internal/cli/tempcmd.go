@@ -243,7 +243,7 @@ func (a *App) tempCreate(args []string) error {
 		if err := a.use(ctx); err != nil {
 			return err
 		}
-		a.say("switched to %s", ctx)
+		a.switched(ctx)
 	}
 	a.hintNew(ctx, file)
 	a.say("kcx temp rm %s deletes it", name)

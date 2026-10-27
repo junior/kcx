@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/junior/kcx/internal/config"
@@ -23,11 +24,18 @@ var version = "2.0.0-dev"
 // Environment variable names the shell integration relies on. ~/.zshenv and the
 // `kcx init` snippets read them, so they are part of the contract.
 const (
-	EnvRO       = "KCX_RO"        // set inside a read-only shell: the context, with " (READ-ONLY)"
-	EnvROConfig = "KCX_RO_CONFIG" // the read-only kubeconfig, which `kcx env` hands back
-	EnvRun      = "KCX_RUN"       // set inside `kcx run`: the context the run is for
-	EnvAuto     = "KCX_AUTO"      // the KUBECONFIG value the shell integration set itself
+	EnvRO        = "KCX_RO"         // set inside a read-only shell: the context, with " (READ-ONLY)"
+	EnvROConfig  = "KCX_RO_CONFIG"  // the read-only kubeconfig, which `kcx env` hands back
+	EnvRun       = "KCX_RUN"        // set inside `kcx run`: the context the run is for
+	EnvRunConfig = "KCX_RUN_CONFIG" // the run's private file, first in its KUBECONFIG
+	EnvShell     = "KCX_SHELL"      // set inside `kcx shell`: the shell's private file, first in its KUBECONFIG
+	EnvShellAuto = "KCX_SHELL_AUTO" // the KUBECONFIG value a kcx shell's integration set itself
+	EnvAuto      = "KCX_AUTO"       // the KUBECONFIG value the shell integration set itself
 )
+
+// scoped are the variables a kcx shell, a run or a read-only shell sets; a new
+// one drops them all before setting its own, so one never inherits another's.
+var scoped = []string{"KUBECONFIG", EnvAuto, EnvRun, EnvRunConfig, EnvRO, EnvROConfig, EnvShell, EnvShellAuto}
 
 // usageError is a mistake in the arguments: exit 2, and a pointer to -h.
 type usageError struct{ msg string }
@@ -54,6 +62,16 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(
 	if err != nil {
 		fmt.Fprintf(stderr, "kcx: %s\n", err)
 		return 1
+	}
+	// Inside a kcx shell or a run, the previous context and the previous
+	// namespaces are the private file's neighbours, so `kcx -` and `kcx ns -`
+	// there never touch what the other shells share.
+	for _, v := range []string{EnvShell, EnvRunConfig} {
+		if p := getenv(v); p != "" {
+			lay.Prev = filepath.Join(filepath.Dir(p), "kubectx")
+			lay.NSPrev = filepath.Join(filepath.Dir(p), "kubens")
+			break
+		}
 	}
 	app.lay = lay
 	if err := app.run(args); err != nil {
@@ -107,12 +125,14 @@ func (a *App) run(args []string) error {
 		return a.cmdCurrent()
 	case "run":
 		return a.cmdRun(args[1:])
+	case "shell":
+		return a.cmdShell(args[1:])
 	case "-r":
 		return a.cmdReadonly(args[1:])
 	case "init":
-		return a.cmdShell(shell.Init, "kcx init zsh|bash", args[1:])
+		return a.cmdSnippet(shell.Init, "kcx init zsh|bash", args[1:])
 	case "completion":
-		return a.cmdShell(shell.Completion, "kcx completion zsh|bash", args[1:])
+		return a.cmdSnippet(shell.Completion, "kcx completion zsh|bash", args[1:])
 	case "doctor":
 		return a.cmdDoctor(args[1:])
 	case "temp":
@@ -147,9 +167,9 @@ func (a *App) run(args []string) error {
 	return a.cmdSwitchArgs(args)
 }
 
-// cmdEnv prints the export line for shells other than zsh. A read-only shell's
-// (or a run's) KUBECONFIG is the point of it: a startup file that evals this must
-// get that one back, never the real credentials.
+// cmdEnv prints the export line for shells other than zsh. A read-only shell's,
+// a kcx shell's or a run's KUBECONFIG is the point of it: a startup file that
+// evals this must get that one back, never the shared or the real one.
 func (a *App) cmdEnv() error {
 	switch {
 	case a.getenv(EnvRO) != "":
@@ -158,6 +178,12 @@ func (a *App) cmdEnv() error {
 			v = a.getenv("KUBECONFIG")
 		}
 		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(v))
+	case a.getenv(EnvShell) != "":
+		k := a.getenv(EnvShell) + string(os.PathListSeparator) + a.lay.Kubeconfig()
+		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s %s=%s\n", shellQuote(k), EnvShellAuto, shellQuote(k))
+	case a.getenv(EnvRunConfig) != "":
+		k := a.getenv(EnvRunConfig) + string(os.PathListSeparator) + a.lay.Kubeconfig()
+		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(k))
 	case a.getenv(EnvRun) != "":
 		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(a.getenv("KUBECONFIG")))
 	default:
@@ -167,8 +193,8 @@ func (a *App) cmdEnv() error {
 	return nil
 }
 
-// cmdShell prints a shell snippet: `kcx init SHELL` or `kcx completion SHELL`.
-func (a *App) cmdShell(f func(string) (string, error), usage string, args []string) error {
+// cmdSnippet prints a shell snippet: `kcx init SHELL` or `kcx completion SHELL`.
+func (a *App) cmdSnippet(f func(string) (string, error), usage string, args []string) error {
 	if len(args) != 1 {
 		return usagef("%s", usage)
 	}
@@ -226,10 +252,10 @@ func (a *App) cmdComplete(words []string) error {
 				}
 			}
 		}
-		for _, w := range []string{"ns", "fetch", "run", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "temp", "-c", "-", "-h", "-v"} {
+		for _, w := range []string{"ns", "fetch", "run", "shell", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "temp", "-c", "-", "-h", "-v"} {
 			fmt.Fprintln(a.stdout, w)
 		}
-	case "run", "-r":
+	case "run", "shell", "-r":
 		if len(words) == 1 {
 			ctxs, _ := a.store().Contexts()
 			for _, c := range ctxs {

@@ -80,6 +80,9 @@ func (a *App) contextRows() ([]picker.Line, error) {
 	}
 	var rows []picker.Line
 	for _, f := range s.Files {
+		if f == s.Shadow {
+			continue // a kcx shell's or a run's copies of the contexts below
+		}
 		if _, err := os.Stat(f); err != nil {
 			continue
 		}
@@ -387,7 +390,7 @@ func (a *App) pickNamespace(files []string, ctx string) error {
 	if err != nil {
 		return err
 	}
-	if err := ns.Set(files, ctx, choice); err != nil {
+	if err := a.setNamespace(files, ctx, choice); err != nil {
 		return err
 	}
 	if current != choice && a.getenv(EnvRO) == "" {

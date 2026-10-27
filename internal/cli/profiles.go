@@ -182,11 +182,32 @@ func (a *App) cmdSwitchArgs(args []string) error {
 }
 
 // switchTo is `kcx NAME`: switch; fetch first when NAME is only in a profile or
-// its credentials no longer work; --refresh fetches regardless.
+// its credentials no longer work; --refresh fetches regardless. Inside a kcx
+// shell the switch is the shell's own (see use).
 func (a *App) switchTo(name, user string, refresh, noProbe bool) error {
 	if err := a.runGuard(); err != nil {
 		return err
 	}
+	ctx, c, set, err := a.prepare(name, user, refresh, noProbe)
+	if err != nil {
+		return err
+	}
+	if err := a.use(ctx); err != nil {
+		return err
+	}
+	a.switched(ctx)
+	if c != nil {
+		a.readonlyWarning(set, c)
+	}
+	return nil
+}
+
+// prepare resolves NAME for a switch or a kcx shell: a context, or a profile
+// cluster, fetched first when its file is missing or its credentials no longer
+// work (a 401, or a failure in the credential layer); refresh fetches
+// regardless, noProbe skips the check. c is NAME's profile cluster, nil for a
+// context no profile knows.
+func (a *App) prepare(name, user string, refresh, noProbe bool) (string, *profile.Cluster, *profile.Set, error) {
 	ctx, resolveErr := a.resolve(name)
 	var set *profile.Set
 	var c *profile.Cluster
@@ -198,18 +219,13 @@ func (a *App) switchTo(name, user string, refresh, noProbe bool) error {
 			c, _ = set.Lookup(fileNameOf(a.lay, ctx, name))
 		}
 	} else if resolveErr != nil {
-		return fmt.Errorf("%v; and the profiles cannot be read: %v", resolveErr, err)
+		return "", nil, nil, fmt.Errorf("%v; and the profiles cannot be read: %v", resolveErr, err)
 	}
 	switch {
 	case c == nil && resolveErr != nil:
-		return resolveErr
+		return "", nil, nil, resolveErr
 	case c == nil:
-		// Not a profile cluster: a plain switch.
-		if err := a.use(ctx); err != nil {
-			return err
-		}
-		a.say("switched to %s", ctx)
-		return nil
+		return ctx, nil, set, nil // not a profile cluster: nothing to fetch or probe
 	}
 	needFetch := refresh || resolveErr != nil
 	var probeErr error
@@ -235,17 +251,12 @@ func (a *App) switchTo(name, user string, refresh, noProbe bool) error {
 		ctx, err = a.fetchCluster(set, c, user)
 		if err != nil {
 			if probeErr != nil {
-				return fmt.Errorf("%s: the credentials failed (%v) and fetching again failed: %w", c.Name, probeErr, err)
+				return "", nil, nil, fmt.Errorf("%s: the credentials failed (%v) and fetching again failed: %w", c.Name, probeErr, err)
 			}
-			return err
+			return "", nil, nil, err
 		}
 	}
-	if err := a.use(ctx); err != nil {
-		return err
-	}
-	a.say("switched to %s", ctx)
-	a.readonlyWarning(set, c)
-	return nil
+	return ctx, c, set, nil
 }
 
 // fileNameOf returns the short name of the file that defines ctx under configs/,
@@ -382,7 +393,7 @@ func (a *App) cmdFetch(args []string) error {
 		if err := a.use(lastCtx); err != nil {
 			return err
 		}
-		a.say("switched to %s", lastCtx)
+		a.switched(lastCtx)
 		a.readonlyWarning(set, clusters[0])
 	}
 	if aborted || len(failed) > 0 {
@@ -563,7 +574,7 @@ func (a *App) cmdNs(args []string) error {
 			return fmt.Errorf("no namespace %s in %s; --force sets it anyway", namespace, ctx)
 		}
 	}
-	if err := ns.Set(files, ctx, namespace); err != nil {
+	if err := a.setNamespace(files, ctx, namespace); err != nil {
 		return err
 	}
 	if current != namespace && a.getenv(EnvRO) == "" {

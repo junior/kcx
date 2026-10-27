@@ -121,10 +121,14 @@ func (a *App) cmdDoctor(args []string) error {
 	}
 
 	// The shell.
+	want, auto := a.lay.Kubeconfig(), EnvAuto
+	if private := a.getenv(EnvShell); private != "" {
+		want, auto = private+string(os.PathListSeparator)+want, EnvShellAuto
+	}
 	if k := a.getenv("KUBECONFIG"); k == "" {
 		note("KUBECONFIG is not set in this shell; eval \"$(kcx init zsh)\" (or bash) sets it from the layout")
-	} else if k != a.lay.Kubeconfig() && a.getenv(EnvRO) == "" && a.getenv(EnvRun) == "" {
-		if a.getenv(EnvAuto) == "" {
+	} else if k != want && a.getenv(EnvRO) == "" && a.getenv(EnvRun) == "" {
+		if a.getenv(auto) == "" {
 			note("KUBECONFIG was set by something other than kcx's shell integration; kcx env prints the layout's value")
 		} else {
 			note("KUBECONFIG is behind the layout (a file was added or removed); the next prompt, or eval \"$(kcx env)\", catches up")

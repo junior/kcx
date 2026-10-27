@@ -179,7 +179,7 @@ func (a *App) cmdAdd(where string, args []string) error {
 		if err := a.use(ctx); err != nil {
 			return err
 		}
-		a.say("switched to %s", ctx)
+		a.switched(ctx)
 	}
 	return nil
 }

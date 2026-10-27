@@ -27,12 +27,17 @@ Contexts and namespaces
                               it; without an argument, list the cluster's namespaces
       --force                 set it without asking the cluster whether it exists
 
-One cluster per command, and read-only
+One cluster per command or per shell, and read-only
   kcx run NAME [-n NS] -- CMD...
                               run one command against NAME, the shared current context
                               untouched: what agents should use. A switch or a namespace
                               change inside stays inside. A cluster that is read-only by
                               default runs behind the read-only proxy unless --rw
+  kcx shell [NAME] [-n NS] [--rw]
+                              a shell of its own for NAME: kcx NAME, kcx -, kcx ns and
+                              kubectl config changes inside it stay inside it, and the
+                              other shells keep their context. A cluster that is read-only
+                              by default opens a read-only shell unless --rw
   kcx -r [NAME] [-n NS] [-- CMD...]
                               a read-only shell for NAME, or one read-only command: a
                               local proxy refuses writes, exec, attach, port-forward and

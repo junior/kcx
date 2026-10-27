@@ -4,6 +4,37 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.1.0 (2026-10-26)
+
+### Added
+
+- `kcx shell [NAME] [-n NS] [--rw]`: a shell of its own for one cluster. A
+  private kubeconfig comes first in its `KUBECONFIG`, holding a copy of every
+  context (names only, never credentials) and the shell's current context, so
+  `kcx NAME`, `kcx -`, `kcx ns`, the picker, every `--use` and kubectl's own
+  `config use-context` and `set-context` inside it change that file and
+  nothing else; the previous context and namespaces are the shell's own too.
+  NAME resolves as `kcx NAME` does, fetching when the file is missing or the
+  login is dead; without NAME, a picker. A cluster that is read-only by
+  default opens a read-only shell unless `--rw`.
+- The shell integration knows a kcx shell (`KCX_SHELL`, its value tracked by
+  `KCX_SHELL_AUTO`, so an older inline copy of the function that knows only
+  `KCX_AUTO` leaves it alone), and at the first prompt of a kcx shell, a
+  read-only shell or a run puts back that shell's own `KUBECONFIG` when a
+  startup file read after the snippet set another. Its prompt hooks now come
+  first, so the prompt shows what is current.
+- `kcx run` exports `KCX_RUN_CONFIG`, its private file: `kcx env` and the
+  first-prompt restore give an interactive shell inside a run its kubeconfig
+  back, and `ls` there no longer reports the run's copy as a duplicate.
+
+### Fixed
+
+- A read-only shell starts in the context's own namespace, as kubectl would,
+  rather than in `default`; `-n` still overrides it.
+- `kcx init zsh` sorts the cluster files bytewise, as the Go side does, so
+  `kcx doctor` no longer calls `KUBECONFIG` behind the layout under a locale
+  that sorts mixed-case names otherwise.
+
 ## 2.0.1 (2026-10-26)
 
 ### Fixed

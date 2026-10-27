@@ -11,12 +11,18 @@ import (
 	"github.com/junior/kcx/internal/layout"
 )
 
-// store is what kcx itself reads: the layout, except inside a read-only shell or
-// a run, whose KUBECONFIG is the point of them.
+// store is what kcx itself reads: the layout, except inside a read-only shell, a
+// kcx shell or a run, whose own kubeconfig is the point of them. A kcx shell's
+// and a run's private file comes first and is marked as the store's Shadow.
 func (a *App) store() kubeconfig.Store {
 	if a.getenv(EnvRO) != "" {
 		if ro := a.getenv(EnvROConfig); ro != "" {
 			return kubeconfig.Store{Files: []string{ro}}
+		}
+	}
+	for _, v := range []string{EnvShell, EnvRunConfig} {
+		if p := a.getenv(v); p != "" {
+			return kubeconfig.Store{Files: append([]string{p}, a.lay.Files()...), Shadow: p}
 		}
 	}
 	if a.getenv(EnvRO) != "" || a.getenv(EnvRun) != "" {
@@ -30,6 +36,15 @@ func (a *App) store() kubeconfig.Store {
 // say prints one of kcx's own lines on standard output.
 func (a *App) say(format string, args ...any) {
 	fmt.Fprintf(a.stdout, "kcx: "+format+"\n", args...)
+}
+
+// switched confirms a switch, saying when it was a kcx shell's own.
+func (a *App) switched(ctx string) {
+	if a.getenv(EnvShell) != "" {
+		a.say("switched to %s in this kcx shell", ctx)
+		return
+	}
+	a.say("switched to %s", ctx)
 }
 
 // warn prints one of kcx's own lines on standard error without failing.
@@ -92,6 +107,18 @@ func (a *App) use(ctx string) error {
 	if err != nil {
 		return err
 	}
+	if private := a.getenv(EnvShell); private != "" {
+		// Inside a kcx shell a switch is the shell's: its private file gets the
+		// context (a copy, if it has none yet) and the current context; the
+		// state file the other shells share is left alone.
+		if err := a.shellCopy(private, ctx, true); err != nil {
+			return err
+		}
+		if cur != "" && cur != ctx {
+			return kubeconfig.WritePrevious(a.lay.Prev, cur)
+		}
+		return nil
+	}
 	if err := a.lay.Ensure(); err != nil {
 		return err
 	}
@@ -124,7 +151,7 @@ func (a *App) cmdPrevious() error {
 	if err := a.use(prev); err != nil {
 		return err
 	}
-	a.say("switched to %s", prev)
+	a.switched(prev)
 	return nil
 }
 
@@ -177,6 +204,9 @@ func (a *App) cmdLs(args []string) error {
 	inbox := 0
 	var stray []string
 	for _, f := range s.Files {
+		if f == s.Shadow {
+			continue // copies of contexts listed below, and the shell's current one
+		}
 		if _, err := os.Stat(f); err != nil {
 			continue
 		}

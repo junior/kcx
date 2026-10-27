@@ -22,9 +22,13 @@ import (
 	"github.com/junior/kcx/internal/layout"
 )
 
-// Store is the list of files kcx reads, in KUBECONFIG order.
+// Store is the list of files kcx reads, in KUBECONFIG order. Inside a kcx shell
+// or a run, Shadow names the private file that comes first: it holds copies of
+// contexts and the shell's current context, so listings skip it, while the
+// merged view (Load, Current) reads it first.
 type Store struct {
-	Files []string
+	Files  []string
+	Shadow string
 }
 
 // Load merges the files the way kubectl does: the first file to set a key wins,

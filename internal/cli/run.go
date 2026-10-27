@@ -11,6 +11,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/junior/kcx/internal/kubeconfig"
+	"github.com/junior/kcx/internal/ns"
 	"github.com/junior/kcx/internal/profile"
 	"github.com/junior/kcx/internal/proxy"
 )
@@ -100,9 +101,158 @@ func (a *App) cmdRun(args []string) error {
 		return err
 	}
 	files := append([]string{shadow}, a.lay.Files()...)
-	env := withoutEnv(os.Environ(), "KUBECONFIG", EnvAuto, EnvRun, EnvRO, EnvROConfig)
-	env = append(env, "KUBECONFIG="+strings.Join(files, string(os.PathListSeparator)), EnvRun+"="+ctx)
+	env := withoutEnv(os.Environ(), scoped...)
+	env = append(env, "KUBECONFIG="+strings.Join(files, string(os.PathListSeparator)), EnvRun+"="+ctx, EnvRunConfig+"="+shadow)
 	return a.exec(cmd, env)
+}
+
+// cmdShell is `kcx shell [NAME] [-n NS] [--rw]`: a shell of its own for NAME.
+// It resolves NAME as `kcx NAME` does (fetching when the file is missing or the
+// login is dead), then starts $SHELL with a private kubeconfig first in
+// KUBECONFIG: copies of every context (names only, never credentials) and the
+// shell's current context. A switch (kcx NAME, kcx -, the picker), a namespace
+// change (kcx ns, kubectl config set-context) or a kubectl config use-context
+// inside lands in that file, so the other shells keep theirs. A cluster that is
+// read-only by default opens a read-only shell instead, unless --rw.
+func (a *App) cmdShell(args []string) error {
+	if err := a.runGuard(); err != nil {
+		return err
+	}
+	if a.getenv(EnvShell) != "" {
+		return fmt.Errorf("this is already a kcx shell: kcx NAME switches it, exit leaves it")
+	}
+	name, namespace, rw := "", "", false
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "-n" || arg == "--namespace":
+			if i+1 >= len(args) {
+				return usagef("-n needs a namespace")
+			}
+			i++
+			namespace = args[i]
+		case strings.HasPrefix(arg, "-n") && len(arg) > 2:
+			namespace = arg[2:]
+		case arg == "--rw":
+			rw = true
+		case strings.HasPrefix(arg, "-"):
+			return usagef("unknown option %s", arg)
+		default:
+			if name != "" {
+				return usagef("kcx shell [NAME] [-n NS] [--rw]")
+			}
+			name = arg
+		}
+	}
+	if name == "" {
+		picked, err := a.pickContext("shell> ", "a kcx shell for which context?")
+		if err != nil {
+			return err
+		}
+		if picked == "" {
+			return nil
+		}
+		name = picked
+	}
+	ctx, c, set, err := a.prepare(name, "", false, false)
+	if err != nil {
+		return err
+	}
+	if c != nil && set.Readonly(c) && !rw {
+		a.warn("%s is read-only by default (group %s): a read-only shell; --rw opens a kcx shell with the real credentials", c.Name, c.Group)
+		return a.readonly(ctx, namespace, nil)
+	}
+	work, err := os.MkdirTemp("", "kcx-shell.")
+	if err != nil {
+		return fmt.Errorf("mktemp failed: %w", err)
+	}
+	defer os.RemoveAll(work)
+	private := filepath.Join(work, "config.yaml")
+	if err := a.writeShellConfig(private, ctx, namespace); err != nil {
+		return err
+	}
+	list := private + string(os.PathListSeparator) + a.lay.Kubeconfig()
+	// KCX_SHELL_AUTO, not KCX_AUTO, tracks the value: a startup file that knows
+	// only KCX_AUTO (an older ~/.zshenv) then leaves this KUBECONFIG alone.
+	env := withoutEnv(os.Environ(), scoped...)
+	env = append(env, "KUBECONFIG="+list, EnvShell+"="+private, EnvShellAuto+"="+list)
+	sh := a.getenv("SHELL")
+	if sh == "" {
+		sh = "/bin/sh"
+	}
+	a.say("kcx shell for %s: kcx NAME, kcx ns and kubectl config changes stay in this shell; exit to leave", ctx)
+	err = a.exec([]string{sh}, env)
+	a.say("kcx shell closed")
+	return err
+}
+
+// writeShellConfig writes a kcx shell's private kubeconfig: a copy of every
+// context the layout defines (the context entries only; the clusters and users
+// stay in their files, which KUBECONFIG lists after this one), the namespace of
+// the starting context replaced when one is given, and that context current.
+// With every context copied, any change kubectl makes to a context lands here.
+func (a *App) writeShellConfig(path, ctx, namespace string) error {
+	merged, err := kubeconfig.Store{Files: a.lay.Files()}.Load()
+	if err != nil {
+		return err
+	}
+	if _, ok := merged.Contexts[ctx]; !ok {
+		return fmt.Errorf("no context named %s", ctx)
+	}
+	cfg := clientcmdapi.NewConfig()
+	for name, c := range merged.Contexts {
+		cp := *c
+		cp.LocationOfOrigin = ""
+		cfg.Contexts[name] = &cp
+	}
+	if namespace != "" {
+		cfg.Contexts[ctx].Namespace = namespace
+	}
+	cfg.CurrentContext = ctx
+	return kubeconfig.WriteFile(path, cfg)
+}
+
+// shellCopy makes sure a kcx shell's private file holds a copy of ctx (a
+// cluster fetched or added during the shell has none yet) and, when current
+// is set, makes it the shell's current context.
+func (a *App) shellCopy(private, ctx string, current bool) error {
+	cfg, err := kubeconfig.LoadFile(private)
+	if err != nil {
+		return err
+	}
+	changed := false
+	if _, ok := cfg.Contexts[ctx]; !ok {
+		merged, err := kubeconfig.Store{Files: a.lay.Files()}.Load()
+		if err != nil {
+			return err
+		}
+		real, ok := merged.Contexts[ctx]
+		if !ok {
+			return fmt.Errorf("no context named %s", ctx)
+		}
+		cp := *real
+		cp.LocationOfOrigin = ""
+		cfg.Contexts[ctx] = &cp
+		changed = true
+	}
+	if current && cfg.CurrentContext != ctx {
+		cfg.CurrentContext = ctx
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return kubeconfig.WriteFile(private, cfg)
+}
+
+// setNamespace sets ctx's namespace the way kubectl does, in the first file
+// that defines ctx; inside a kcx shell that is made to be the shell's own file.
+func (a *App) setNamespace(files []string, ctx, namespace string) error {
+	if private := a.getenv(EnvShell); private != "" {
+		if err := a.shellCopy(private, ctx, false); err != nil {
+			return err
+		}
+	}
+	return ns.Set(files, ctx, namespace)
 }
 
 // writeShadow writes a one-context kubeconfig: the context under its own name,
@@ -188,6 +338,15 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 		return err
 	}
 	roctx := proxy.ReadonlyContext(ctx)
+	if namespace == "" {
+		// The namespace the context has (a kcx shell's own, from inside one),
+		// as kubectl would use it, rather than the server's default.
+		if merged, err := a.store().Load(); err == nil {
+			if c, ok := merged.Contexts[ctx]; ok {
+				namespace = c.Namespace
+			}
+		}
+	}
 	if namespace != "" {
 		cfg, err := kubeconfig.LoadFile(ro)
 		if err != nil {
@@ -201,7 +360,7 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 	// KCX_RO keeps it read-only through the shell's own startup files: the init
 	// snippet and `kcx env` leave this KUBECONFIG alone, and kcx itself refuses
 	// everything but queries inside.
-	env := withoutEnv(os.Environ(), "KUBECONFIG", EnvAuto, EnvRun, EnvRO, EnvROConfig)
+	env := withoutEnv(os.Environ(), scoped...)
 	env = append(env, "KUBECONFIG="+ro, EnvRO+"="+roctx, EnvROConfig+"="+ro)
 	if len(cmd) > 0 {
 		a.warn("read-only run on %s", roctx)

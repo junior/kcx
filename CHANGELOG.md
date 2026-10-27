@@ -4,7 +4,7 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
-## Unreleased: 2.1.1
+## 2.1.1 (2026-10-27)
 
 ### Changed
 

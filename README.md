@@ -110,7 +110,9 @@ order the files list them (file by file, as their names sort), with a check
 mark on the clusters that have a file and a star on the current one. A group's
 `label` is what the picker shows for it, its `color` paints its rows (red,
 green, yellow, blue, magenta, cyan or white; `NO_COLOR` turns that off), and a
-site is any text. In the browse, ESC steps back and q quits.
+site is any text. In the browse, ESC steps back and q quits. `kcx profile ls`
+lists the same clusters as a table, in the same colours when its output is a
+terminal.
 
 ### Secret providers
 

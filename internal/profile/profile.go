@@ -97,8 +97,8 @@ func (g *Group) Display() string {
 	return g.Name
 }
 
-// Colors are the colour names a group may carry; the picker paints its rows
-// with them.
+// Colors are the colour names a group may carry; the picker and kcx profile ls
+// paint its rows with them.
 var Colors = []string{"red", "green", "yellow", "blue", "magenta", "cyan", "white"}
 
 // Cluster is one cluster a profile knows.

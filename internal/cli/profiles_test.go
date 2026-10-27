@@ -6,11 +6,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/internal/picker"
+	"github.com/junior/kcx/internal/profile"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -416,6 +419,52 @@ func TestNamespaces(t *testing.T) {
 		t.Fatal("ns in RO must not record a previous namespace")
 	}
 	_ = calls
+}
+
+// kcx profile ls paints a cluster's name and group in the group's colour, as the
+// picker does, and the coloured table lines up as the plain one; a group with no
+// colour stays plain, and so does the table when the output is not a terminal.
+func TestProfileLsColours(t *testing.T) {
+	f := withProfiles(t, "")
+	files, err := profile.Files([]string{filepath.Join(f.dir, "profiles")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := profile.Load(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetched := func(n string) bool {
+		_, err := os.Stat(f.lay.PermFile(n))
+		return err == nil
+	}
+	plain := profileRows(set, fetched, func(_, s string) string { return s })
+	coloured := profileRows(set, fetched, picker.Paint)
+	if len(coloured) != 4 || len(plain) != 4 {
+		t.Fatalf("rows: %q", coloured)
+	}
+	for i, r := range coloured {
+		want := append([]string(nil), plain[i]...)
+		if i > 0 && plain[i][1] == "production" {
+			want[0], want[1] = "\x1b[31m"+want[0]+"\x1b[0m", "\x1b[31mproduction\x1b[0m"
+		}
+		if strings.Join(r, "|") != strings.Join(want, "|") {
+			t.Errorf("row %d: %q, want %q", i, r, want)
+		}
+	}
+	var p, c strings.Builder
+	writeColumns(&p, plain)
+	writeColumns(&c, coloured)
+	if got := regexp.MustCompile("\x1b\\[[0-9;]*m").ReplaceAllString(c.String(), ""); got != p.String() {
+		t.Fatalf("the coloured table does not line up:\n%s\nplain:\n%s", got, p.String())
+	}
+	if !strings.Contains(c.String(), "\x1b[31mprod1\x1b[0m  \x1b[31mproduction\x1b[0m  -") {
+		t.Fatalf("prod1 is not red:\n%q", c.String())
+	}
+	code, out, _ := runKcx(t, f.env, "profile", "ls")
+	if code != 0 || out != p.String() {
+		t.Fatalf("profile ls into a buffer: %d\n%s", code, out)
+	}
 }
 
 func TestProfileAndSecretCommands(t *testing.T) {

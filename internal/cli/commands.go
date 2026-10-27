@@ -10,6 +10,7 @@ import (
 
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/internal/picker"
 	"github.com/junior/kcx/internal/profile"
 )
 
@@ -417,7 +418,8 @@ func (a *App) cmdLs(args []string) error {
 	return nil
 }
 
-// writeColumns aligns rows of cells, two spaces between columns.
+// writeColumns aligns rows of cells, two spaces between columns; a cell's
+// colour codes take no room.
 func writeColumns(w io.Writer, rows [][]string) {
 	var width []int
 	for _, r := range rows {
@@ -425,8 +427,8 @@ func writeColumns(w io.Writer, rows [][]string) {
 			for len(width) <= i {
 				width = append(width, 0)
 			}
-			if len(c) > width[i] {
-				width[i] = len(c)
+			if n := picker.Width(c); n > width[i] {
+				width[i] = n
 			}
 		}
 	}
@@ -438,7 +440,7 @@ func writeColumns(w io.Writer, rows [][]string) {
 				break
 			}
 			b.WriteString(c)
-			b.WriteString(strings.Repeat(" ", width[i]-len(c)+2))
+			b.WriteString(strings.Repeat(" ", width[i]-picker.Width(c)+2))
 		}
 		fmt.Fprintln(w, strings.TrimRight(b.String(), " "))
 	}

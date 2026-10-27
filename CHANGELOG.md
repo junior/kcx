@@ -4,6 +4,14 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## Unreleased: 2.1.1
+
+### Changed
+
+- `kcx profile ls` paints each cluster's name and group in the group's
+  `color`, as the picker already does, when its output is a terminal and
+  `NO_COLOR` is not set; into a file or a pipe the table stays plain.
+
 ## 2.1.0 (2026-10-26)
 
 ### Added

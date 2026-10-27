@@ -123,11 +123,17 @@ Examples
 // helpText is the usage: coloured when standard output is a terminal and
 // NO_COLOR is not set, plain otherwise.
 func (a *App) helpText() string {
-	f, ok := a.stdout.(*os.File)
-	if !ok || !term.IsTerminal(int(f.Fd())) || a.getenv("NO_COLOR") != "" {
+	if !a.colourful() {
 		return usageText
 	}
 	return colourUsage(usageText)
+}
+
+// colourful says standard output is a terminal and NO_COLOR is not set: kcx -h
+// and kcx profile ls print in colour then, and plain otherwise.
+func (a *App) colourful() bool {
+	f, ok := a.stdout.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd())) && a.getenv("NO_COLOR") == ""
 }
 
 const (

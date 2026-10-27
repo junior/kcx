@@ -421,24 +421,11 @@ func (a *App) cmdProfile(args []string) error {
 			a.warn("no profiles in %s", strings.Join(a.profileSources(), ":"))
 			return nil
 		}
-		rows := [][]string{{"NAME", "GROUP", "SITE", "PROVIDER", "FETCHED", "READ-ONLY"}}
-		for _, n := range set.Names() {
-			c := set.Clusters[n]
-			fetched := "-"
-			if _, err := os.Stat(a.lay.PermFile(n)); err == nil {
-				fetched = "yes"
-			}
-			ro := "-"
-			if set.Readonly(c) {
-				ro = "yes"
-			}
-			site := c.Site
-			if site == "" {
-				site = "-"
-			}
-			rows = append(rows, []string{n, c.Group, site, set.ProviderOf(c).Name, fetched, ro})
+		paint := func(_, s string) string { return s }
+		if a.colourful() {
+			paint = a.paint
 		}
-		writeColumns(a.stdout, rows)
+		writeColumns(a.stdout, profileRows(set, a.fetched, paint))
 		return nil
 	case "check":
 		files, err := profile.Files(a.profileSources())
@@ -456,6 +443,27 @@ func (a *App) cmdProfile(args []string) error {
 		return nil
 	}
 	return usagef("kcx profile ls|check")
+}
+
+// profileRows is the table kcx profile ls prints: a header, then each cluster in
+// profile order with its group, site, provider and whether it is fetched and
+// read-only; the name and the group in the group's colour, as the picker shows
+// them.
+func profileRows(set *profile.Set, fetched func(string) bool, paint func(color, s string) string) [][]string {
+	rows := [][]string{{"NAME", "GROUP", "SITE", "PROVIDER", "FETCHED", "READ-ONLY"}}
+	for _, n := range set.Names() {
+		c := set.Clusters[n]
+		done, ro := "-", "-"
+		if fetched(n) {
+			done = "yes"
+		}
+		if set.Readonly(c) {
+			ro = "yes"
+		}
+		color := set.GroupOf(c).Color
+		rows = append(rows, []string{paint(color, n), paint(color, c.Group), siteOf(c), set.ProviderOf(c).Name, done, ro})
+	}
+	return rows
 }
 
 // cmdSecret is `kcx secret status|refresh|forget [PROVIDER]`: a pass-through to

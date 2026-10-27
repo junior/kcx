@@ -49,9 +49,10 @@ kcx NAME                    switch; fetch first when NAME is only in a profile o
                             credentials no longer work (--refresh forces)
 kcx -  |  kcx -c            previous context  |  current context
 kcx --unset                 no current context; kcx - brings it back
-kcx ns [NAME|-|-c]          namespace: switch, go back, print; a picker without arguments
-kcx ls [-q]                 every context, where its file lives, its server, and what
-                            kubectl would quietly get wrong
+kcx ns [NAME|-|-c|--unset]  namespace: switch, go back, print, unset; a picker without arguments
+kcx ls [-q] [--group G] [PATTERN]
+                            every context, where its file lives, its server, and what
+                            kubectl would quietly get wrong; filtered by group or name
 kcx run NAME [-n NS] -- CMD one command against one cluster, the shared context untouched
 kcx shell [NAME] [-n NS]    a shell of its own: switches and namespaces inside stay inside
 kcx -r [NAME] [-- CMD]      a read-only shell, or one read-only command
@@ -65,7 +66,8 @@ kcx doctor [--fix]          check the layout, the files, the settings and the pr
                             --fix repairs modes and stray current contexts
 ```
 
-`kcx -h` has the details.
+`kcx -h` has the details. kubectx's and kubens's long spellings work as well:
+`--current`, `--readonly`, `--shell` (`-s`), `-V`.
 
 ## Profiles: bring your own cluster list
 

@@ -20,12 +20,15 @@ Contexts and namespaces
                               its credentials no longer work (--refresh: fetch regardless;
                               --no-probe: do not check them)
   kcx -                       switch to the previous context
-  kcx -c                      print the current context
+  kcx -c, --current           print the current context
   kcx --unset                 no current context; the one that was becomes the previous
-  kcx ls [-q]                 every context: where its file lives and its server
-                              (-q: names only)
-  kcx ns [NAME|-|-c]          switch the current context's namespace, go back, or print
-                              it; without an argument, list the cluster's namespaces
+  kcx ls [-q] [--group G] [PATTERN]
+                              every context: where its file lives and its server.
+                              -q: names only; --group: the clusters of a profile group;
+                              PATTERN: names that contain it, or match it with * ? [ ]
+  kcx ns [NAME|-|-c|--unset]  switch the current context's namespace, go back, print it
+                              or unset it; without an argument, list the cluster's
+                              namespaces (-c is also --current)
       --force                 set it without asking the cluster whether it exists
 
 One cluster per command or per shell, and read-only
@@ -38,12 +41,14 @@ One cluster per command or per shell, and read-only
                               a shell of its own for NAME: kcx NAME, kcx -, kcx ns and
                               kubectl config changes inside it stay inside it, and the
                               other shells keep their context. A cluster that is read-only
-                              by default opens a read-only shell unless --rw
+                              by default opens a read-only shell unless --rw. Also
+                              kcx -s or kcx --shell
   kcx -r [NAME] [-n NS] [-- CMD...]
                               a read-only shell for NAME, or one read-only command: a
                               local proxy refuses writes, exec, attach, port-forward and
                               cp before they leave the machine; auth can-i still works.
-                              Inside the shell, kcx ns changes the shell's namespace only
+                              Inside the shell, kcx ns changes the shell's namespace only.
+                              Also kcx --readonly
 
 Profiles: the clusters a machine may fetch
   ~/.config/kcx/profiles/*.toml (KCX_PROFILES overrides), in groups, each through a
@@ -99,7 +104,7 @@ Shell and setup
   kcx doctor [--fix]          check the layout, the files, the settings, the profiles
                               and the programs kcx relies on; --fix first repairs the
                               modes and a current context a cluster file sets of its own
-  kcx -v                      version
+  kcx -v, -V, --version       version
   kcx -h                      this help (plain when NO_COLOR is set or output is a file)
 
 Agents

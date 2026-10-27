@@ -152,7 +152,7 @@ func TestLs(t *testing.T) {
 	if code != 0 || out != "alpha\nbeta\nminikube\n" {
 		t.Fatalf("ls -q: %d %q", code, out)
 	}
-	if code, _, errs := runKcx(t, e, "ls", "-x"); code != 2 || !strings.Contains(errs, "takes only -q") {
+	if code, _, errs := runKcx(t, e, "ls", "-x"); code != 2 || !strings.Contains(errs, "kcx ls [-q] [--group G] [PATTERN]") {
 		t.Fatalf("ls -x: %d %q", code, errs)
 	}
 	ro := env{"HOME": e["HOME"], EnvRO: "beta (READ-ONLY)"}

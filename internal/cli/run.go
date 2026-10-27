@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
@@ -255,6 +257,34 @@ func (a *App) setNamespace(files []string, ctx, namespace string) error {
 	return ns.Set(files, ctx, namespace)
 }
 
+// unsetNamespace is `kcx ns --unset`: the current context sets no namespace any
+// more, so kubectl uses default; the one it had becomes the previous namespace,
+// as with any change (not inside a read-only shell, as there).
+func (a *App) unsetNamespace(files []string) error {
+	ctx, current, err := ns.Current(files)
+	if err != nil {
+		return err
+	}
+	merged, err := kubeconfig.Store{Files: files}.Load()
+	if err != nil {
+		return err
+	}
+	if c, ok := merged.Contexts[ctx]; !ok || c.Namespace == "" {
+		a.say("%s sets no namespace; kubectl uses default", ctx)
+		return nil
+	}
+	if err := a.setNamespace(files, ctx, ""); err != nil {
+		return err
+	}
+	if a.getenv(EnvRO) == "" {
+		if err := ns.WritePrevious(a.lay.NSPrev, ctx, current); err != nil {
+			return err
+		}
+	}
+	a.say("namespace of %s unset; kubectl uses default", ctx)
+	return nil
+}
+
 // writeShadow writes a one-context kubeconfig: the context under its own name,
 // pointing at the real cluster and user by name (kubectl resolves them across
 // files), with the run's namespace, and set as current.
@@ -379,6 +409,14 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 
 // exec runs a command with the given environment, the user's terminal as its
 // stdio, and reports its exit status through exitError.
+//
+// While the child runs, kcx outlives the signals meant for it, so that it can
+// remove its private files and return the child's status: Ctrl-C reaches the
+// child from the terminal itself (they share a process group, or an
+// interactive shell holds the terminal), so kcx only stays alive; a terminate
+// or a hang-up (a closed terminal window) is passed on to the child. A signal
+// ignored when kcx started (nohup, or & in a script) stays ignored, for the
+// child as well.
 func (a *App) exec(cmd []string, env []string) error {
 	path, err := exec.LookPath(cmd[0])
 	if err != nil {
@@ -389,14 +427,59 @@ func (a *App) exec(cmd []string, env []string) error {
 	// The user's own stdio in production (os.Stdin and friends are files, so a
 	// shell gets its terminal); buffers in tests.
 	c.Stdin, c.Stdout, c.Stderr = a.stdin, a.stdout, a.stderr
-	if err := c.Run(); err != nil {
+	var watch []os.Signal
+	for _, s := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
+		if !signal.Ignored(s) {
+			watch = append(watch, s)
+		}
+	}
+	sigs := make(chan os.Signal, 4)
+	if len(watch) > 0 {
+		signal.Notify(sigs, watch...)
+		defer signal.Stop(sigs)
+	}
+	if err := c.Start(); err != nil {
+		return fmt.Errorf("cannot run %s: %w", cmd[0], err)
+	}
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case s := <-sigs:
+				if s != os.Interrupt {
+					_ = c.Process.Signal(s)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	err = c.Wait()
+	close(done)
+	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return exitError{ee.ExitCode()}
+			return exitError{exitCode(ee)}
 		}
 		return fmt.Errorf("cannot run %s: %w", cmd[0], err)
 	}
 	return nil
+}
+
+// exitCode is the child's exit status or, when a signal ended it, 128 plus the
+// signal's number, as a shell reports it.
+func exitCode(ee *exec.ExitError) int {
+	if code := ee.ExitCode(); code >= 0 {
+		return code
+	}
+	type signaled interface {
+		Signaled() bool
+		Signal() syscall.Signal
+	}
+	if ws, ok := ee.Sys().(signaled); ok && ws.Signaled() {
+		return 128 + int(ws.Signal())
+	}
+	return 1
 }
 
 // withoutEnv returns env minus the named variables.

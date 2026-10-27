@@ -26,6 +26,18 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 - `kcx --unset`: no current context, as kubectx's `-u` does; the context that
   was current becomes the previous one, so `kcx -` brings it back. Long form
   only: `-u` stays the user of a fetch.
+- `kcx ns --unset`: the current context sets no namespace any more, so
+  kubectl uses default; the old one becomes the previous namespace.
+- `kcx ls [--group G] [PATTERN]`: the contexts of a profile group, and names
+  that contain PATTERN or, with `*`, `?` or `[`, match it as a glob; with `-q`
+  too. `--group` completes the profile's group names, for `fetch` as well.
+- kubectx's and kubens's long spellings: `--current` (also for `kcx ns`),
+  `--readonly`, `--shell` and `-s`, `-V`.
+- `kcx run`, `kcx shell` and `kcx -r` outlive the signals meant for their
+  child: Ctrl-C reaches the child from the terminal, a terminate or a hang-up
+  (a closed terminal window) is passed on to it, and kcx then removes its
+  private files and returns the child's status, 128 plus the signal's number
+  when a signal ended it. A signal ignored when kcx started stays ignored.
 - `kcx run` exports `KCX_RUN_CONFIG`, its private file: `kcx env` and the
   first-prompt restore give an interactive shell inside a run its kubeconfig
   back, and `ls` there no longer reports the run's copy as a duplicate.

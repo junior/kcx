@@ -100,7 +100,7 @@ func (a *App) run(args []string) error {
 		// init and completion only print shell snippets, and a startup file that
 		// evaluates them runs inside this shell too: the snippet's own guard keeps
 		// the read-only KUBECONFIG.
-		case "", "ls", "list", "env", "init", "completion", "-c", "current", "ns", "__complete", "-h", "--help", "help", "-v", "--version":
+		case "", "ls", "list", "env", "init", "completion", "-c", "--current", "current", "ns", "__complete", "-h", "--help", "help", "-v", "-V", "--version":
 		default:
 			return fmt.Errorf("this is a READ-ONLY shell for %s: only kcx ls, env, init, completion, -c and ns work here; exit it first", a.getenv(EnvRO))
 		}
@@ -109,7 +109,7 @@ func (a *App) run(args []string) error {
 	case "-h", "--help", "help":
 		fmt.Fprint(a.stdout, a.helpText())
 		return nil
-	case "-v", "--version":
+	case "-v", "-V", "--version":
 		fmt.Fprintf(a.stdout, "kcx %s\n", version)
 		return nil
 	case "env":
@@ -121,7 +121,7 @@ func (a *App) run(args []string) error {
 		return a.cmdComplete(args[1:])
 	case "":
 		return a.cmdPick()
-	case "-c", "current":
+	case "-c", "--current", "current":
 		return a.cmdCurrent()
 	case "--unset":
 		if len(args) != 1 {
@@ -130,9 +130,9 @@ func (a *App) run(args []string) error {
 		return a.cmdUnset()
 	case "run":
 		return a.cmdRun(args[1:])
-	case "shell":
+	case "shell", "-s", "--shell":
 		return a.cmdShell(args[1:])
-	case "-r":
+	case "-r", "--readonly":
 		return a.cmdReadonly(args[1:])
 	case "init":
 		return a.cmdSnippet(shell.Init, "kcx init zsh|bash", args[1:])
@@ -237,6 +237,13 @@ func (a *App) cmdComplete(words []string) error {
 			fmt.Fprintln(a.stdout, p)
 		}
 		return nil
+	case "--group":
+		if set, err := a.profiles(); err == nil {
+			for _, g := range set.GroupNames() {
+				fmt.Fprintln(a.stdout, g)
+			}
+		}
+		return nil
 	}
 	names := func(dir string) {
 		for _, f := range layout.DirFiles(dir) {
@@ -274,6 +281,10 @@ func (a *App) cmdComplete(words []string) error {
 				}
 			}
 		}
+	case "ls", "list":
+		for _, w := range []string{"-q", "--group"} {
+			fmt.Fprintln(a.stdout, w)
+		}
 	case "init", "completion":
 		if len(words) == 1 {
 			fmt.Fprintln(a.stdout, "zsh")
@@ -300,7 +311,7 @@ func (a *App) cmdComplete(words []string) error {
 		}
 	case "ns", "namespace":
 		if len(words) == 1 {
-			for _, w := range []string{"-c", "-", "--force"} {
+			for _, w := range []string{"-c", "-", "--force", "--unset"} {
 				fmt.Fprintln(a.stdout, w)
 			}
 		}

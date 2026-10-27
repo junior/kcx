@@ -524,15 +524,20 @@ func (a *App) cmdSecret(args []string) error {
 
 // cmdNs is `kcx ns [NAME|-|-c] [--force]`.
 func (a *App) cmdNs(args []string) error {
-	force := false
+	force, unset := false, false
 	target := ""
 	for _, arg := range args {
+		if arg == "--current" { // kubens's spelling
+			arg = "-c"
+		}
 		switch {
 		case arg == "--force" || arg == "-f":
 			force = true
+		case arg == "--unset":
+			unset = true
 		case arg == "-c" || arg == "-" || !strings.HasPrefix(arg, "-"):
 			if target != "" {
-				return usagef("kcx ns [NAME|-|-c] [--force]")
+				return usagef("kcx ns [NAME|-|-c|--unset] [--force]")
 			}
 			target = arg
 		default:
@@ -540,6 +545,12 @@ func (a *App) cmdNs(args []string) error {
 		}
 	}
 	files := a.store().Files
+	if unset {
+		if target != "" {
+			return usagef("kcx ns --unset takes no namespace")
+		}
+		return a.unsetNamespace(files)
+	}
 	switch target {
 	case "-c":
 		_, namespace, err := ns.Current(files)

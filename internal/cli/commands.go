@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"sort"
 	"strings"
 
 	"github.com/junior/kcx/internal/kubeconfig"
 	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/internal/profile"
 )
 
 // store is what kcx itself reads: the layout, except inside a read-only shell, a
@@ -67,6 +69,80 @@ func (a *App) cmdUnset() error {
 		return nil
 	}
 	a.say("no current context now (it was %s; kcx - brings it back)", cur)
+	return nil
+}
+
+// lsFilter builds the filter of `kcx ls --group G PATTERN`, nil when there is
+// none. A context passes --group when its file is a profile cluster of group G
+// (the file's short name, whatever the context is called), and PATTERN when its
+// name contains it, or, with * ? or [ in it, matches it as a glob.
+func (a *App) lsFilter(group, pattern string) (func(ctx, file string, contexts int) bool, error) {
+	if group == "" && pattern == "" {
+		return nil, nil
+	}
+	var set *profile.Set
+	if group != "" {
+		s, err := a.profiles()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := s.Groups[group]; !ok {
+			return nil, fmt.Errorf("no group named %s in the profiles (kcx profile ls)", group)
+		}
+		set = s
+	}
+	glob := strings.ContainsAny(pattern, "*?[")
+	if glob {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return nil, usagef("%s is not a valid pattern: %v", pattern, err)
+		}
+	}
+	return func(ctx, file string, contexts int) bool {
+		if set != nil {
+			c, ok := set.Lookup(clusterNameOf(a.lay, file, ctx, contexts))
+			if !ok || c.Group != group {
+				return false
+			}
+		}
+		switch {
+		case pattern == "":
+			return true
+		case glob:
+			ok, _ := path.Match(pattern, ctx)
+			return ok
+		default:
+			return strings.Contains(ctx, pattern)
+		}
+	}, nil
+}
+
+// lsNames prints the names of the contexts that pass keep, sorted, each once:
+// `kcx ls -q` with a filter.
+func (a *App) lsNames(s kubeconfig.Store, keep func(ctx, file string, contexts int) bool) error {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range s.Files {
+		if f == s.Shadow {
+			continue
+		}
+		if _, err := os.Stat(f); err != nil {
+			continue
+		}
+		cfg, err := kubeconfig.LoadFile(f)
+		if err != nil {
+			continue
+		}
+		for n := range cfg.Contexts {
+			if !seen[n] && keep(n, f, len(cfg.Contexts)) {
+				seen[n] = true
+				out = append(out, n)
+			}
+		}
+	}
+	sort.Strings(out)
+	for _, n := range out {
+		fmt.Fprintln(a.stdout, n)
+	}
 	return nil
 }
 
@@ -202,19 +278,41 @@ func (a *App) cmdCurrent() error {
 // cmdLs lists every context: where its file lives and its server, and on
 // standard error what kubectl would quietly get wrong.
 func (a *App) cmdLs(args []string) error {
-	quiet := false
-	switch {
-	case len(args) == 0:
-	case len(args) == 1 && args[0] == "-q":
-		quiet = true
-	default:
-		return usagef("kcx ls takes only -q")
+	quiet, group, pattern := false, "", ""
+	const usage = "kcx ls [-q] [--group G] [PATTERN]"
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "-q":
+			quiet = true
+		case arg == "--group":
+			if i+1 >= len(args) {
+				return usagef("--group needs a group")
+			}
+			i++
+			group = args[i]
+		case strings.HasPrefix(arg, "--group="):
+			group = strings.TrimPrefix(arg, "--group=")
+		case strings.HasPrefix(arg, "-"):
+			return usagef(usage)
+		default:
+			if pattern != "" {
+				return usagef(usage)
+			}
+			pattern = arg
+		}
 	}
 	if ro := a.getenv(EnvRO); ro != "" {
 		fmt.Fprintln(a.stdout, ro)
 		return nil
 	}
+	keep, err := a.lsFilter(group, pattern)
+	if err != nil {
+		return err
+	}
 	s := a.store()
+	if quiet && keep != nil {
+		return a.lsNames(s, keep)
+	}
 	if quiet {
 		ctxs, err := s.Contexts()
 		if err != nil {
@@ -254,14 +352,17 @@ func (a *App) cmdLs(args []string) error {
 		}
 		sort.Strings(names)
 		for _, n := range names {
+			if f == a.lay.State {
+				inbox++
+			}
+			if keep != nil && !keep(n, f, len(names)) {
+				continue
+			}
 			mark := ""
 			if n == cur {
 				mark = "*"
 			}
 			rows = append(rows, row{mark, n, where, kubeconfig.ServerOf(cfg, n)})
-			if f == a.lay.State {
-				inbox++
-			}
 		}
 		for _, e := range kubeconfig.Entries(cfg) {
 			if other, seen := first[e]; seen {
@@ -278,7 +379,11 @@ func (a *App) cmdLs(args []string) error {
 		}
 	}
 	if len(rows) == 0 {
-		a.warn("no contexts yet: kcx add NAME FILE|-|-- CMD..., or kcx temp create NAME")
+		if keep != nil {
+			a.warn("no context matches")
+		} else {
+			a.warn("no contexts yet: kcx add NAME FILE|-|-- CMD..., or kcx temp create NAME")
+		}
 	} else {
 		var lines [][]string
 		for _, r := range rows {

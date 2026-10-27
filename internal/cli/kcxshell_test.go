@@ -274,3 +274,38 @@ func writeKubeconfigContextOnly(t *testing.T, path, ctx, cluster, user string) {
 		t.Fatal(err)
 	}
 }
+
+// kcx --unset leaves no current context; kcx - brings it back. Not inside a
+// kcx shell or a run.
+func TestUnset(t *testing.T) {
+	e, l := fixture(t)
+	if code, _, errs := runKcx(t, e, "alpha"); code != 0 {
+		t.Fatalf("kcx alpha: %q", errs)
+	}
+	code, stdout, errs := runKcx(t, e, "--unset")
+	if code != 0 || !strings.Contains(stdout, "no current context now (it was alpha") || currentOf(t, l.State) != "" {
+		t.Fatalf("--unset: %d %q %q", code, stdout, errs)
+	}
+	if code, stdout, _ := runKcx(t, e, "--unset"); code != 0 || !strings.Contains(stdout, "no current context to unset") {
+		t.Fatalf("--unset twice: %d %q", code, stdout)
+	}
+	if code, stdout, _ := runKcx(t, e, "-"); code != 0 || !strings.Contains(stdout, "switched to alpha") {
+		t.Fatalf("kcx - after --unset: %d %q", code, stdout)
+	}
+	if code, _, _ := runKcx(t, e, "--unset", "x"); code != 2 {
+		t.Fatal("--unset takes no arguments")
+	}
+	// A cluster file with a current context of its own keeps one current: said so.
+	writeKubeconfig(t, l.PermFile("stray"), "stray", "stray", "stray", "https://stray.example.test", "stray")
+	if code, _, errs := runKcx(t, e, "--unset"); code != 0 || !strings.Contains(errs, "stray is still current: a cluster file sets it") {
+		t.Fatalf("--unset with a stray file: %d %q", code, errs)
+	}
+	private := filepath.Join(t.TempDir(), "config.yaml")
+	writeKubeconfigContextOnly(t, private, "alpha", "alpha", "alpha")
+	if code, _, errs := runKcx(t, env{"HOME": e["HOME"], EnvShell: private}, "--unset"); code != 1 || !strings.Contains(errs, "a kcx shell always has a context of its own") {
+		t.Fatalf("--unset in a kcx shell: %d %q", code, errs)
+	}
+	if code, _, errs := runKcx(t, env{"HOME": e["HOME"], EnvRun: "alpha"}, "--unset"); code != 1 || !strings.Contains(errs, "inside kcx run") {
+		t.Fatalf("--unset in a run: %d %q", code, errs)
+	}
+}

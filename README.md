@@ -48,6 +48,7 @@ kcx                         pick a context (fzf); the top line browses your prof
 kcx NAME                    switch; fetch first when NAME is only in a profile or its
                             credentials no longer work (--refresh forces)
 kcx -  |  kcx -c            previous context  |  current context
+kcx --unset                 no current context; kcx - brings it back
 kcx ns [NAME|-|-c]          namespace: switch, go back, print; a picker without arguments
 kcx ls [-q]                 every context, where its file lives, its server, and what
                             kubectl would quietly get wrong

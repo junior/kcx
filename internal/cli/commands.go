@@ -38,6 +38,38 @@ func (a *App) say(format string, args ...any) {
 	fmt.Fprintf(a.stdout, "kcx: "+format+"\n", args...)
 }
 
+// cmdUnset is `kcx --unset`: no current context, as kubectx -u does. The one
+// that was current becomes the previous one, so `kcx -` brings it back. Not
+// inside a kcx shell, which would then follow the shared context.
+func (a *App) cmdUnset() error {
+	if err := a.runGuard(); err != nil {
+		return err
+	}
+	if a.getenv(EnvShell) != "" {
+		return fmt.Errorf("a kcx shell always has a context of its own: kcx NAME switches it, exit leaves it")
+	}
+	cur, err := a.store().Current()
+	if err != nil {
+		return err
+	}
+	if cur == "" {
+		a.say("there is no current context to unset")
+		return nil
+	}
+	if err := kubeconfig.ClearCurrent(a.lay.State); err != nil {
+		return err
+	}
+	if err := kubeconfig.WritePrevious(a.lay.Prev, cur); err != nil {
+		return err
+	}
+	if still, err := a.store().Current(); err == nil && still != "" {
+		a.warn("%s is still current: a cluster file sets it; kcx doctor --fix unsets it there", still)
+		return nil
+	}
+	a.say("no current context now (it was %s; kcx - brings it back)", cur)
+	return nil
+}
+
 // switched confirms a switch, saying when it was a kcx shell's own.
 func (a *App) switched(ctx string) {
 	if a.getenv(EnvShell) != "" {

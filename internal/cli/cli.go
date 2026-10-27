@@ -123,6 +123,11 @@ func (a *App) run(args []string) error {
 		return a.cmdPick()
 	case "-c", "current":
 		return a.cmdCurrent()
+	case "--unset":
+		if len(args) != 1 {
+			return usagef("kcx --unset takes no arguments")
+		}
+		return a.cmdUnset()
 	case "run":
 		return a.cmdRun(args[1:])
 	case "shell":
@@ -252,7 +257,7 @@ func (a *App) cmdComplete(words []string) error {
 				}
 			}
 		}
-		for _, w := range []string{"ns", "fetch", "run", "shell", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "temp", "-c", "-", "-h", "-v"} {
+		for _, w := range []string{"ns", "fetch", "run", "shell", "-r", "profile", "secret", "ls", "env", "init", "completion", "doctor", "add", "rm", "mv", "adopt", "temp", "-c", "--unset", "-", "-h", "-v"} {
 			fmt.Fprintln(a.stdout, w)
 		}
 	case "run", "shell", "-r":

@@ -21,6 +21,7 @@ Contexts and namespaces
                               --no-probe: do not check them)
   kcx -                       switch to the previous context
   kcx -c                      print the current context
+  kcx --unset                 no current context; the one that was becomes the previous
   kcx ls [-q]                 every context: where its file lives and its server
                               (-q: names only)
   kcx ns [NAME|-|-c]          switch the current context's namespace, go back, or print

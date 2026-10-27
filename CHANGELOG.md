@@ -23,6 +23,9 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   read-only shell or a run puts back that shell's own `KUBECONFIG` when a
   startup file read after the snippet set another. Its prompt hooks now come
   first, so the prompt shows what is current.
+- `kcx --unset`: no current context, as kubectx's `-u` does; the context that
+  was current becomes the previous one, so `kcx -` brings it back. Long form
+  only: `-u` stays the user of a fetch.
 - `kcx run` exports `KCX_RUN_CONFIG`, its private file: `kcx env` and the
   first-prompt restore give an interactive shell inside a run its kubeconfig
   back, and `ls` there no longer reports the run's copy as a duplicate.

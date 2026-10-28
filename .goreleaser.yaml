@@ -82,9 +82,8 @@ notarize:
         wait: true
         timeout: 20m
 
-changelog:
-  disable: true # the release notes come from CHANGELOG.md, kept by hand
-
+# The release notes are the tag's section of CHANGELOG.md, which release.yml
+# passes with --release-notes. Disabling the changelog would drop them too.
 release:
   github:
     owner: junior

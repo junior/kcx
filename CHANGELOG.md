@@ -4,6 +4,27 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.1.2 (2026-10-29)
+
+### Security
+
+- The read-only proxy (`kcx -r`, and `kcx run` or `kcx shell` on a read-only
+  group) answered every request that reached its port on 127.0.0.1. While one
+  ran, another user of the same machine could read through it whatever your
+  credentials can read, Secrets included, and a web page could try the same by
+  rebinding a name of its own to 127.0.0.1. It now speaks TLS, with a
+  certificate made for the session by a CA made for the session, and answers
+  only requests addressed to 127.0.0.1 or localhost that carry a token made
+  for the session, which only the shell's kubeconfig (mode 0600) holds. The
+  token stops at the proxy: the API server sees the same credentials as
+  before. Every release from 2.0.0 to 2.1.1 is affected.
+- The read-only proxy refuses impersonation (`kubectl --as`, `--as-group`,
+  `--as-uid`), which would act as someone else with your credentials. A
+  request that brings credentials of its own (`kubectl --token`) is refused
+  too, where it used to reach the cluster with them.
+- golang.org/x/net 0.62.0, for GO-2026-6866 and GO-2026-6860; govulncheck
+  finds no call from kcx into either.
+
 ## 2.1.1 (2026-10-27)
 
 ### Changed

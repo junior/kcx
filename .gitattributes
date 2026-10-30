@@ -1,0 +1,4 @@
+# LF in every checkout, Windows' included: go mod tidy, gofmt and the tests
+# compare bytes, and the shell snippets run as written.
+* text=auto eol=lf
+*.gif binary

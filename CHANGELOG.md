@@ -4,6 +4,59 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.0-rc.1 (2026-10-29)
+
+### Added
+
+- Windows, amd64 and arm64, now works as macOS and Linux do, and CI runs the
+  tests and a PowerShell end to end there. kcx follows kubectl's home
+  (client-go's rule: HOME when set, else USERPROFILE or HOMEDRIVE and
+  HOMEPATH), so both agree on `~/.kube`; `kcx rm` moves a file to the Recycle
+  Bin; `kcx shell` and the read-only shell start `SHELL`, else PowerShell 7,
+  Windows PowerShell or `cmd.exe`; prompts for a secret or a temp cluster's
+  name read the console; a file that another process holds open is replaced
+  after a short retry; `kcx doctor` leaves file modes out there.
+- PowerShell, on Windows and elsewhere: `kcx init pwsh`, loaded with
+  `kcx init pwsh | Out-String | Invoke-Expression`, keeps `KUBECONFIG` in step
+  before each prompt and installs completion, as the zsh and bash snippets do.
+  It wraps the prompt in place (load it after a prompt theme's own init),
+  hands that prompt the last command's `$?` and `$LASTEXITCODE`, and runs
+  under Set-StrictMode. `kcx completion pwsh` and `kcx env pwsh` complete the
+  set.
+- `go install github.com/junior/kcx/v2/cmd/kcx@latest`: the module path is
+  now `github.com/junior/kcx/v2`, so Go installs releases from this one on
+  (the v2 tags before it remain unusable to Go), and such a build reports its
+  module version in `kcx -v`.
+- `kcx add` says what an imported kubeconfig does that its owner should
+  know: a cluster reached over plain http or without TLS verification, and a
+  user that logs in by running a program (named by its command alone). `kcx
+  doctor` notes the same for every file it manages.
+
+### Changed
+
+- A fetch's timeout is the command's alone. The secret provider's `get` has a
+  bound of its own and a refresh prompt has none, so looking a password up
+  for minutes no longer fails the fetch as it is pasted.
+- A process that a fetch command leaves behind holding its output (a helper
+  it started) no longer keeps kcx waiting: kcx goes on two seconds after the
+  command ends or is killed.
+- The release build stamps the version as `-X main.version=X.Y.Z`. Packagers
+  change the `-X` path; the Homebrew formula moves with this release.
+
+### Security
+
+- The read-only proxy refuses a path with dot segments or doubled slashes,
+  which reads one way to it and could read another way behind a load
+  balancer that cleans paths in front of the API server.
+- Names and addresses read from kubeconfig files reach the terminal with
+  control and format characters escaped, in `kcx ls` and in doctor's
+  findings: a context named with an escape sequence cannot drive the
+  terminal.
+- From this release on, a release is immutable once published, release tags
+  cannot be moved or deleted, the workflows run only actions pinned to a
+  commit, and the release's secrets live in an environment that only release
+  tags reach.
+
 ## 2.1.2 (2026-10-29)
 
 ### Security

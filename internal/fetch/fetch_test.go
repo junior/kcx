@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/junior/kcx/v2/internal/profile"
 )
@@ -26,7 +27,7 @@ env > "$FAKE_ENV"
 printf '%s\n' "$@" > "$FAKE_ARGS"
 case "$host" in
   net.example) echo "dial tcp: i/o timeout" >&2; exit 1 ;;
-  slow.example) sleep 5; exit 1 ;;
+  slow.example) sleep 30; exit 1 ;;
   nofile.example) exit 0 ;;
 esac
 if [ "$pw" != "good" ]; then echo "error: 401 Unauthorized" >&2; exit 1; fi
@@ -50,7 +51,7 @@ const fakeBroker = `#!/bin/sh
 cache="$FAKE_CACHE"
 case "$1" in
   get) [ -s "$cache" ] || { echo "nothing cached" >&2; exit 1; }; printf '%s' "$(cat "$cache")" ;;
-  refresh) IFS= read -r pw; [ -n "$pw" ] || exit 1; printf '%s' "$pw" > "$cache"; printf 'refreshed\n' >> "$FAKE_LOG" ;;
+  refresh) [ -n "${FAKE_REFRESH_DELAY-}" ] && sleep "$FAKE_REFRESH_DELAY"; IFS= read -r pw; [ -n "$pw" ] || exit 1; printf '%s' "$pw" > "$cache"; printf 'refreshed\n' >> "$FAKE_LOG" ;;
   forget) rm -f "$cache"; printf 'forgot\n' >> "$FAKE_LOG" ;;
   status) [ -s "$cache" ] && { echo cached; exit 0; } || { echo empty; exit 1; } ;;
 esac
@@ -287,17 +288,36 @@ func TestNetworkErrorKeepsCache(t *testing.T) {
 }
 
 func TestTimeoutAndNoFile(t *testing.T) {
-	h := newHarness(t, "1s")
+	h := newHarness(t, "2s")
 	_ = os.WriteFile(h.cache, []byte("good"), 0o600)
+	// The fake hangs in a sleep of its own, which outlives the shell killed at
+	// the timeout and holds its output open: kcx returns anyway, well before the
+	// sleep ends.
+	start := time.Now()
 	err := h.runner(false, "").Fetch(context.Background(), h.req("slow"))
-	if err == nil || !strings.Contains(err.Error(), "timed out after 1s") {
+	if err == nil || !strings.Contains(err.Error(), "timed out after 2s") {
 		t.Fatalf("timeout: %v", err)
+	}
+	if took := time.Since(start); took > 20*time.Second {
+		t.Fatalf("the timed-out fetch took %s: something kept waiting for the hung process", took)
 	}
 	h.cacheIs(t, "good")
 	err = h.runner(false, "").Fetch(context.Background(), h.req("nofile"))
 	if err == nil || !strings.Contains(err.Error(), "wrote no kubeconfig") {
 		t.Fatalf("no file: %v", err)
 	}
+}
+
+// A person can take minutes to look a password up: the refresh prompt is not on
+// the command's clock, which starts once the secret is there.
+func TestSlowRefreshKeepsTheCommandsTime(t *testing.T) {
+	h := newHarness(t, "2s")
+	t.Setenv("FAKE_REFRESH_DELAY", "3")
+	if err := h.runner(true, "good\n").Fetch(context.Background(), h.req("a")); err != nil {
+		t.Fatalf("a refresh slower than the timeout must not fail the fetch: %v", err)
+	}
+	h.cacheIs(t, "good")
+	h.attemptsAre(t, 1)
 }
 
 func TestNoSecretProvider(t *testing.T) {

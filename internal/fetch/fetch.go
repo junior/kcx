@@ -130,30 +130,24 @@ func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
-	cctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	var stdin io.Reader = strings.NewReader("")
 	if prov != nil {
 		// The secret is produced before the command starts: a provider that has
 		// nothing stops the fetch here, so a missing secret is never sent as a bad
 		// login. The bytes wait in the pipe; a password is far smaller than a pipe.
-		secretReader, wait, err := prov.Get(cctx)
-		if err != nil || wait() != nil {
-			if err == nil {
-				err = errors.New("no usable secret")
-			}
+		// Reading it is bounded by the timeout; asking for it is not, since a
+		// person may take minutes to look a password up, and the command's own
+		// timeout starts once the secret is there.
+		secretReader, err := readSecret(ctx, prov, timeout)
+		if err != nil {
 			if !r.Interactive || !prov.Caches() {
 				return Failed, fmt.Errorf("no secret for provider %s (%v); run kcx secret refresh %s from a terminal", prov.Name(), err, prov.Name())
 			}
-			if err := prov.Refresh(cctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
+			if err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
 				return Failed, err
 			}
-			secretReader, wait, err = prov.Get(cctx)
-			if err != nil {
-				return Failed, err
-			}
-			if err := wait(); err != nil {
+			if secretReader, err = readSecret(ctx, prov, timeout); err != nil {
 				return Failed, err
 			}
 		}
@@ -161,8 +155,14 @@ func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string
 		// Newline-terminated, as a program reading a line from a pipe expects.
 		stdin = io.MultiReader(secretReader, strings.NewReader("\n"))
 	}
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	_ = os.Remove(out)
 	cmd := exec.CommandContext(cctx, args[0], args[1:]...)
+	// A process the command leaves behind holding its output (a helper it
+	// started) would keep kcx waiting past the timeout, and after a command that
+	// succeeded; WaitDelay closes the pipes and returns.
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Stdin = stdin
 	var captured limitedBuffer
 	cmd.Stdout = io.MultiWriter(r.Stdout, &captured)
@@ -188,6 +188,22 @@ func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string
 	}
 	_ = os.Chmod(out, 0o600)
 	return OK, nil
+}
+
+// readSecret runs the provider's get within timeout and hands back the secret,
+// waiting in its pipe.
+func readSecret(ctx context.Context, prov secret.Provider, timeout time.Duration) (io.ReadCloser, error) {
+	gctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	rd, wait, err := prov.Get(gctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := wait(); err != nil {
+		_ = rd.Close()
+		return nil, err
+	}
+	return rd, nil
 }
 
 func (r *Runner) environ() []string {

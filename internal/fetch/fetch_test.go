@@ -54,7 +54,7 @@ cache="$FAKE_CACHE"
 case "$1" in
   get) [ -s "$cache" ] || { echo "nothing cached" >&2; exit 1; }; printf '%s' "$(cat "$cache")" ;;
   refresh) [ -n "${FAKE_REFRESHES-}" ] && printf 'refresh\n' >> "$FAKE_REFRESHES"; [ -n "${FAKE_REFRESH_DELAY-}" ] && sleep "$FAKE_REFRESH_DELAY"; IFS= read -r pw; [ -n "$pw" ] || exit 1; printf '%s' "$pw" > "$cache"; printf 'refreshed\n' >> "$FAKE_LOG" ;;
-  forget) rm -f "$cache"; printf 'forgot\n' >> "$FAKE_LOG" ;;
+  forget) rm -f "$cache"; printf 'forgot\n' >> "$FAKE_LOG"; [ -n "${FAKE_FORGET_ENV-}" ] && printf '[%s]\n' "${KCX_SECRET_REJECTED-}" >> "$FAKE_FORGET_ENV" ;;
   status) [ -s "$cache" ] && { echo cached; exit 0; } || { echo empty; exit 1; } ;;
 esac
 `
@@ -399,6 +399,27 @@ func TestSecretCacheOff(t *testing.T) {
 	}
 	if _, err := os.Stat(h.cache); !os.IsNotExist(err) {
 		t.Fatal("secret_cache = false must forget after the fetch")
+	}
+}
+
+// A forget after a refusal tells the provider so (KCX_SECRET_REJECTED=1); the
+// forget after a good fetch under secret_cache = false does not.
+func TestForgetAfterRefusalSaysRejected(t *testing.T) {
+	h := newHarness(t, "")
+	seen := filepath.Join(t.TempDir(), "forget-env")
+	t.Setenv("FAKE_FORGET_ENV", seen)
+	_ = os.WriteFile(h.cache, []byte("stale"), 0o600)
+	if err := h.runner(false, "").Fetch(context.Background(), h.req("a")); !errors.Is(err, ErrRejected) {
+		t.Fatalf("a stale secret: %v", err)
+	}
+	_ = os.WriteFile(h.cache, []byte("good"), 0o600)
+	r := h.runner(false, "")
+	r.SecretCache = false
+	if err := r.Fetch(context.Background(), h.req("a")); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(seen); string(data) != "[1]\n[]\n" {
+		t.Fatalf("what forget saw: %q, want the refusal's [1] then the plain []", data)
 	}
 }
 

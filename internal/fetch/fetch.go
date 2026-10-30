@@ -129,7 +129,7 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 				retried = true
 				continue
 			}
-			_ = prov.Forget(ctx)
+			_ = forgetRejected(ctx, prov)
 			if retried || !r.Interactive || !prov.Caches() {
 				return fmt.Errorf("cluster %s: %w; nothing was cached and no retry was made", c.Name, ErrRejected)
 			}
@@ -237,6 +237,15 @@ func (r *Runner) secretFor(ctx context.Context, prov secret.Provider, timeout ti
 		r.refreshFailed[prov.Name()] = true
 	}
 	return rd, err
+}
+
+// forgetRejected forgets a secret the command refused, telling a provider that
+// can hear it (a program, through KCX_SECRET_REJECTED) why.
+func forgetRejected(ctx context.Context, prov secret.Provider) error {
+	if e, ok := prov.(interface{ ForgetRejected(context.Context) error }); ok {
+		return e.ForgetRejected(ctx)
+	}
+	return prov.Forget(ctx)
 }
 
 // refresh asks the person for a new secret, once per provider in a run: after

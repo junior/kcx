@@ -131,7 +131,9 @@ A provider command that needs a password gets it on standard input from a
 secret provider: any program with four verbs, `get` (writes the secret to
 standard output, which must be a pipe), `refresh` (asks you and stores it),
 `forget`, `status`. The secret travels from `get` to the command through a pipe
-and is never an argument, an environment variable or a string kcx keeps. Two
+and is never an argument, an environment variable or a string kcx keeps. The
+`forget` that follows a refusal runs with `KCX_SECRET_REJECTED=1` in its
+environment, so a provider can tell a refused secret from a plain forget. Two
 providers are built in: `prompt` (asks at every fetch, caches nothing) and
 `env:VAR`.
 

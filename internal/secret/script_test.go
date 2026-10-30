@@ -120,7 +120,10 @@ switch ($verb) {
     [IO.File]::WriteAllText($cache, $line)
     exit 0
   }
-  'forget' { Remove-Item -LiteralPath $cache -ErrorAction Ignore; exit 0 }
+  'forget' {
+    if ($env:FAKE_PS_FORGOT) { Add-Content -LiteralPath $env:FAKE_PS_FORGOT -Value ('[' + $env:KCX_SECRET_REJECTED + ']') }
+    Remove-Item -LiteralPath $cache -ErrorAction Ignore; exit 0
+  }
   'status' { if (Test-Path -LiteralPath $cache) { 'cached'; exit 0 } else { 'empty'; exit 1 } }
   default { exit 2 }
 }
@@ -170,11 +173,22 @@ func TestScriptProviderRuns(t *testing.T) {
 	if err := wait(); err != nil || string(got) != "s3cret" {
 		t.Fatalf("get: %q %v (want the bytes alone, no newline)", got, err)
 	}
+	// A plain forget carries no rejection, even with one in kcx's own
+	// environment; a forget after a refusal carries KCX_SECRET_REJECTED=1.
+	forgot := filepath.Join(dir, "forgot")
+	t.Setenv("FAKE_PS_FORGOT", forgot)
+	t.Setenv(EnvRejected, "1")
 	if err := p.Forget(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if s, _ := p.Status(ctx); s != "empty" {
 		t.Fatalf("status after forget: %q", s)
+	}
+	if err := p.(*Exec).ForgetRejected(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(forgot); strings.Join(strings.Fields(string(data)), " ") != "[] [1]" {
+		t.Fatalf("what forget saw of %s: %q", EnvRejected, data)
 	}
 
 	// Exit 3: the provider cannot run here.

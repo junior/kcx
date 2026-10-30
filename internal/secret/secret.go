@@ -5,7 +5,8 @@
 //	get      writes the secret to standard output, which must be a pipe; exit 0;
 //	         non-zero and nothing on stdout when there is no usable secret
 //	refresh  obtains a new secret from the human and stores it; exit 1 on nothing
-//	forget   drops whatever is cached; always exits 0
+//	forget   drops whatever is cached; always exits 0; KCX_SECRET_REJECTED=1 in
+//	         its environment says the fetch command refused the secret
 //	status   prints cached, expired or empty (with detail after a space); exit 0
 //	         when cached, 1 otherwise
 //
@@ -161,9 +162,28 @@ func (e *Exec) Refresh(ctx context.Context, stdin io.Reader, stdout, stderr io.W
 	return nil
 }
 
-func (e *Exec) Forget(ctx context.Context) error {
+// EnvRejected is set to 1 in the environment of a forget that follows a
+// refusal: the fetch command refused the secret, so a provider can tell that
+// from a plain forget (and, say, refuse to hand the same secret back). Every
+// other forget runs without it, even when the caller's environment has it.
+const EnvRejected = "KCX_SECRET_REJECTED"
+
+func (e *Exec) Forget(ctx context.Context) error { return e.forget(ctx, false) }
+
+// ForgetRejected forgets a secret that the fetch command refused.
+func (e *Exec) ForgetRejected(ctx context.Context) error { return e.forget(ctx, true) }
+
+func (e *Exec) forget(ctx context.Context, rejected bool) error {
 	cmd := e.command(ctx, "forget")
 	cmd.Stderr = e.stderr()
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, EnvRejected+"=") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	if rejected {
+		cmd.Env = append(cmd.Env, EnvRejected+"=1")
+	}
 	if err := cmd.Run(); err != nil {
 		if err := exitError(err); !errors.Is(err, ErrUnavailable) { // one that cannot run here holds nothing
 			return fmt.Errorf("secret provider %s: forget: %w", e.name, err)

@@ -106,6 +106,40 @@ type Entry struct {
 	Name string
 }
 
+// Risks names what a config does that its owner should know before trusting
+// it, in a stable order: a cluster reached over plain http or without TLS
+// verification, where whoever sits between can read the credentials sent; and
+// a user that logs in by running a program, which kubectl runs whenever the
+// context is used. It names the program, never its arguments or environment,
+// which may hold a secret.
+func Risks(cfg *clientcmdapi.Config) []string {
+	var out []string
+	for _, name := range sortedNames(cfg.Clusters) {
+		c := cfg.Clusters[name]
+		switch {
+		case strings.HasPrefix(strings.ToLower(c.Server), "http://"):
+			out = append(out, fmt.Sprintf("cluster %s is reached over plain http: what kubectl sends, credentials included, travels unencrypted", name))
+		case c.InsecureSkipTLSVerify:
+			out = append(out, fmt.Sprintf("cluster %s skips TLS verification: whoever sits between you and it can read what kubectl sends, credentials included", name))
+		}
+	}
+	for _, name := range sortedNames(cfg.AuthInfos) {
+		if u := cfg.AuthInfos[name]; u.Exec != nil && u.Exec.Command != "" {
+			out = append(out, fmt.Sprintf("user %s logs in by running %s, which kubectl runs whenever a context of it is used", name, u.Exec.Command))
+		}
+	}
+	return out
+}
+
+func sortedNames[V any](m map[string]V) []string {
+	names := make([]string, 0, len(m))
+	for n := range m {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Entries lists every cluster, user and context one config defines.
 func Entries(cfg *clientcmdapi.Config) []Entry {
 	var out []Entry

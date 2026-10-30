@@ -171,6 +171,10 @@ func (a *App) cmdAdd(where string, args []string) error {
 	} else {
 		a.say("kept temp cluster %s as context %s (%s)", p.name, ctx, dest)
 	}
+	// A file from elsewhere is trusted from now on: say what it does.
+	for _, r := range kubeconfig.Risks(cfg) {
+		a.warn("note: %s", printable(r))
+	}
 	a.hintNew(ctx, dest)
 	if p.use {
 		if err := a.runGuard(); err != nil {

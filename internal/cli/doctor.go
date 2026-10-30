@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -90,7 +91,7 @@ func (a *App) cmdDoctor(args []string) error {
 		}
 		for _, e := range kubeconfig.Entries(cfg) {
 			if other, seen := first[e]; seen {
-				problem("the %s %s is defined in %s and in %s; kubectl uses the first: rename one (kcx mv)", e.Kind, e.Name, other, f)
+				problem("the %s %s is defined in %s and in %s; kubectl uses the first: rename one (kcx mv)", e.Kind, printable(e.Name), other, f)
 			} else {
 				first[e] = f
 			}
@@ -100,6 +101,9 @@ func (a *App) cmdDoctor(args []string) error {
 		}
 		if f == a.lay.State && len(cfg.Contexts) > 0 {
 			note("%s holds %d context(s) another tool wrote there; kcx adopt CTX [NAME] gives each a file of its own", f, len(cfg.Contexts))
+		}
+		for _, r := range kubeconfig.Risks(cfg) {
+			note("%s: %s", f, printable(r))
 		}
 	}
 	switch {
@@ -118,7 +122,7 @@ func (a *App) cmdDoctor(args []string) error {
 		for _, e := range entries {
 			n := e.Name()
 			if !strings.HasPrefix(n, ".") && !strings.HasSuffix(n, ".yaml") {
-				note("%s/%s is not a .yaml file, so KUBECONFIG does not list it", dir, n)
+				note("%s is not a .yaml file, so KUBECONFIG does not list it", filepath.Join(dir, n))
 			}
 		}
 	}
@@ -128,13 +132,17 @@ func (a *App) cmdDoctor(args []string) error {
 	if private := a.getenv(EnvShell); private != "" {
 		want, auto = private+string(os.PathListSeparator)+want, EnvShellAuto
 	}
+	initLine, envLine := `eval "$(kcx init zsh)" (or bash)`, `eval "$(kcx env)"`
+	if runtime.GOOS == "windows" {
+		initLine, envLine = "kcx init pwsh | Out-String | Invoke-Expression, in your PowerShell profile,", "kcx env pwsh | Out-String | Invoke-Expression"
+	}
 	if k := a.getenv("KUBECONFIG"); k == "" {
-		note("KUBECONFIG is not set in this shell; eval \"$(kcx init zsh)\" (or bash) sets it from the layout")
+		note("KUBECONFIG is not set in this shell; %s sets it from the layout", initLine)
 	} else if k != want && a.getenv(EnvRO) == "" && a.getenv(EnvRun) == "" {
 		if a.getenv(auto) == "" {
 			note("KUBECONFIG was set by something other than kcx's shell integration; kcx env prints the layout's value")
 		} else {
-			note("KUBECONFIG is behind the layout (a file was added or removed); the next prompt, or eval \"$(kcx env)\", catches up")
+			note("KUBECONFIG is behind the layout (a file was added or removed); the next prompt, or %s, catches up", envLine)
 		}
 	} else {
 		ok("KUBECONFIG matches the layout")

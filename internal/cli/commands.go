@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/junior/kcx/v2/internal/kubeconfig"
 	"github.com/junior/kcx/v2/internal/layout"
@@ -160,6 +161,30 @@ func (a *App) switched(ctx string) {
 func (a *App) warn(format string, args ...any) {
 	fmt.Fprintf(a.stderr, "kcx: "+format+"\n", args...)
 }
+
+// printable is s with control and format characters escaped (\x1b, \u202e),
+// for names and addresses read from kubeconfig files on their way to a
+// terminal: a context named with an escape sequence must not drive the
+// terminal, nor one with a direction override show as another name.
+func printable(s string) string {
+	if strings.IndexFunc(s, unprintable) < 0 {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case !unprintable(r):
+			b.WriteRune(r)
+		case r < 0x100:
+			fmt.Fprintf(&b, `\x%02x`, r)
+		default:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		}
+	}
+	return b.String()
+}
+
+func unprintable(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }
 
 // runGuard refuses a switch inside `kcx run`: the context there is fixed for the
 // whole command.
@@ -369,7 +394,7 @@ func (a *App) cmdLs(args []string) error {
 			if other, seen := first[e]; seen {
 				if !told[e] {
 					told[e] = true
-					a.warn("the %s %s is defined in %s and in %s; kubectl uses the first", e.Kind, e.Name, other, f)
+					a.warn("the %s %s is defined in %s and in %s; kubectl uses the first", e.Kind, printable(e.Name), other, f)
 				}
 			} else {
 				first[e] = f
@@ -388,7 +413,7 @@ func (a *App) cmdLs(args []string) error {
 	} else {
 		var lines [][]string
 		for _, r := range rows {
-			lines = append(lines, []string{r.mark, r.ctx, r.where, r.server})
+			lines = append(lines, []string{r.mark, printable(r.ctx), r.where, printable(r.server)})
 		}
 		writeColumns(a.stdout, lines)
 	}

@@ -66,6 +66,7 @@ type harness struct {
 
 func newHarness(t *testing.T, timeout string) *harness {
 	t.Helper()
+	needsPOSIX(t)
 	dir := t.TempDir()
 	h := &harness{dir: dir, cache: filepath.Join(dir, "cache"), log: filepath.Join(dir, "log"),
 		attempts: filepath.Join(dir, "attempts"), envFile: filepath.Join(dir, "env"), argsFile: filepath.Join(dir, "args")}

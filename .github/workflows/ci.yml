@@ -14,7 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest] # Linux amd64 and Apple silicon
+        # Linux amd64, Apple silicon, Windows amd64. Tests that run POSIX shell
+        # scripts skip themselves on Windows; the PowerShell tests run wherever
+        # pwsh is, which is every runner here.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,9 +32,14 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test -count=1 -race ./...
+        # The race detector needs cgo, which the Windows runner is not set up for.
+        run: go test -count=1 ${{ runner.os != 'Windows' && '-race' || '' }} ./...
       - name: Tidy check
         run: go mod tidy -diff
+      - name: End to end in PowerShell (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/windows-e2e.ps1
 
   analysis:
     runs-on: ubuntu-latest

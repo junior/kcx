@@ -95,6 +95,7 @@ func TestLsFilters(t *testing.T) {
 
 // kubectx's and kubens's long spellings work as their short forms.
 func TestLongSpellings(t *testing.T) {
+	needsPOSIX(t)
 	e, _ := fixture(t)
 	if code, _, errs := runKcx(t, e, "alpha"); code != 0 {
 		t.Fatalf("kcx alpha: %q", errs)
@@ -123,6 +124,7 @@ func TestLongSpellings(t *testing.T) {
 
 // A child ended by a signal gives the status a shell would: 128 plus the signal.
 func TestExitStatusOfASignal(t *testing.T) {
+	needsPOSIX(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX signals")
 	}
@@ -136,6 +138,7 @@ func TestExitStatusOfASignal(t *testing.T) {
 // removes its private files and returns the child's status. Ctrl-C alone,
 // which the terminal delivers to the child itself, does not end kcx.
 func TestRunForwardsSignals(t *testing.T) {
+	needsPOSIX(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX signals")
 	}

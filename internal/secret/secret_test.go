@@ -28,6 +28,7 @@ esac
 
 func writeScript(t *testing.T, dir, name, content string) string {
 	t.Helper()
+	needsPOSIX(t)
 	p := filepath.Join(dir, name)
 	if err := os.WriteFile(p, []byte(content), 0o755); err != nil {
 		t.Fatal(err)

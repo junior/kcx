@@ -21,6 +21,7 @@ if [ -n "${KCX_SHELL-}" ]; then cp "$KCX_SHELL" "$KCX_TEST_OUT/private.yaml"; fi
 // fresh directory; it returns the env with SHELL set, and that directory.
 func withFakeShell(t *testing.T, e env) (env, string) {
 	t.Helper()
+	needsPOSIX(t)
 	dir := t.TempDir()
 	sh := filepath.Join(dir, "fake-shell")
 	if err := os.WriteFile(sh, []byte(fakeShell), 0o755); err != nil {
@@ -121,6 +122,7 @@ func TestKcxShellStarts(t *testing.T) {
 // Inside a kcx shell: switches, the previous context, namespaces and listings
 // are the shell's own; the shared state is never touched.
 func TestInsideKcxShell(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	if code, _, errs := runKcx(t, e, "alpha"); code != 0 {
 		t.Fatalf("kcx alpha: %q", errs)
@@ -225,6 +227,7 @@ func TestKcxShellReadonlyDefault(t *testing.T) {
 
 // A read-only shell starts in the context's own namespace, as kubectl would.
 func TestReadonlyKeepsTheNamespace(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	if code, _, errs := runKcx(t, e, "alpha"); code != 0 {
 		t.Fatalf("kcx alpha: %q", errs)
@@ -248,6 +251,7 @@ func TestReadonlyKeepsTheNamespace(t *testing.T) {
 
 // A run tells where its private file is, so kcx env and ls inside know it.
 func TestRunConfig(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	code, stdout, errs := runKcx(t, e, "run", "alpha", "--", "sh", "-c", `printf '%s' "$KCX_RUN_CONFIG"`)
 	if code != 0 || !strings.HasSuffix(stdout, "current.yaml") {

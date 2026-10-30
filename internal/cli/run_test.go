@@ -11,6 +11,7 @@ import (
 )
 
 func TestRunShadowAndExitCode(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	if code, _, _ := runKcx(t, e, "beta"); code != 0 {
 		t.Fatal("switch beta")
@@ -103,6 +104,7 @@ func TestShadowIsolatesNamespaceAndSwitch(t *testing.T) {
 }
 
 func TestReadonlyRunAndShellEnv(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	code, out, errs := runKcx(t, e, "-r", "alpha", "--", "sh", "-c", `printf '%s|%s|' "$KCX_RO" "$KCX_RO_CONFIG"; cat "$KUBECONFIG"; printf '|%s' "${KCX_RUN-unset}"`)
 	if code != 0 {
@@ -158,6 +160,7 @@ func TestReadonlyRunAndShellEnv(t *testing.T) {
 }
 
 func TestRunReadonlyByDefault(t *testing.T) {
+	needsPOSIX(t)
 	f := withProfiles(t, "")
 	e := f.env
 	if code, _, errs := runKcx(t, e, "fetch", "prod1"); code != 0 {

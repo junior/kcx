@@ -166,6 +166,7 @@ func TestLs(t *testing.T) {
 }
 
 func TestAddFromFileStdinAndCommand(t *testing.T) {
+	needsPOSIX(t)
 	e, l := fixture(t)
 	src := filepath.Join(t.TempDir(), "src.yaml")
 	writeKubeconfig(t, src, "admin@lab", "lab", "admin", "https://lab.example.test", "admin@lab")

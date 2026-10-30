@@ -21,6 +21,7 @@ import (
 // fails, so a request through it dies in the credential layer.
 func brokenUser(t *testing.T, path string) {
 	t.Helper()
+	needsPOSIX(t)
 	cfg, err := kubeconfig.LoadFile(path)
 	if err != nil {
 		t.Fatal(err)

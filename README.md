@@ -1,5 +1,9 @@
 # kcx
 
+[![CI](https://github.com/junior/kcx/actions/workflows/ci.yml/badge.svg)](https://github.com/junior/kcx/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/junior/kcx)](https://github.com/junior/kcx/releases/latest)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/junior/kcx/badge)](https://scorecard.dev/viewer/?uri=github.com/junior/kcx)
+
 One kubeconfig file per cluster, and the tools to use them: a context and
 namespace switcher, cluster profiles that fetch a kubeconfig by short name
 through your platform's own command with a brokered secret, a read-only shell

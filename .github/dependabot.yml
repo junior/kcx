@@ -1,9 +1,13 @@
+# A new version waits five days before Dependabot proposes it, so that a
+# compromised release has time to be caught; security updates do not wait.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     groups:
       kubernetes:
         patterns:
@@ -12,3 +16,5 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5

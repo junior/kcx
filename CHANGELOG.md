@@ -4,6 +4,16 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.1 (2026-10-29)
+
+### Changed
+
+- One refresh per secret provider in a run. After a refresh that failed (no
+  answer, or a provider that could not obtain the secret), the rest of `kcx
+  fetch --all`, `--group` or `--missing` does not ask again for that
+  provider: its remaining clusters fail at once, with a word to run `kcx
+  secret refresh`, rather than prompting once per cluster.
+
 ## 2.2.0 (2026-10-29)
 
 ### Added
@@ -89,7 +99,8 @@ pinned GoReleaser.
   only requests addressed to 127.0.0.1 or localhost that carry a token made
   for the session, which only the shell's kubeconfig (mode 0600) holds. The
   token stops at the proxy: the API server sees the same credentials as
-  before. Every release from 2.0.0 to 2.1.1 is affected.
+  before. Every release from 2.0.0 to 2.1.1 is affected: advisory
+  GHSA-3ccq-whw3-694h.
 - The read-only proxy refuses impersonation (`kubectl --as`, `--as-group`,
   `--as-uid`), which would act as someone else with your credentials. A
   request that brings credentials of its own (`kubectl --token`) is refused

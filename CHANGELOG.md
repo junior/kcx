@@ -4,6 +4,17 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.2 (2026-10-29)
+
+### Added
+
+- After the fetch command refuses a secret, kcx runs the provider's `forget`
+  with `KCX_SECRET_REJECTED=1` in its environment, on that call only, so a
+  provider can tell a refused secret from a plain forget and, for one, refuse
+  to hand the same secret back. Every other forget runs without the variable,
+  even when the caller's environment has it; a provider that ignores it works
+  as before.
+
 ## 2.2.1 (2026-10-29)
 
 ### Changed

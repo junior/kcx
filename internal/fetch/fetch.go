@@ -57,6 +57,10 @@ type Runner struct {
 	// Environ is the environment the command runs with (os.Environ() when nil);
 	// KUBECONFIG and KCX_OUT are always replaced.
 	Environ []string
+
+	// refreshFailed holds, by provider name, the refreshes that failed in this
+	// run: a Runner is one run.
+	refreshFailed map[string]bool
 }
 
 // Request is one cluster to fetch.
@@ -131,7 +135,7 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 			}
 			// Rotated or mistyped: ask once, right here, and retry once. Never a loop.
 			r.errf("the secret was refused (rotated?); enter the new one:")
-			if err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
+			if err := r.refresh(ctx, prov); err != nil {
 				return fmt.Errorf("cluster %s: %w; %v", c.Name, ErrRejected, err)
 			}
 			retried = true
@@ -225,10 +229,32 @@ func (r *Runner) secretFor(ctx context.Context, prov secret.Provider, timeout ti
 	if !r.Interactive || !prov.Caches() {
 		return nil, fmt.Errorf("no secret for provider %s (%v); run kcx secret refresh %s from a terminal", prov.Name(), err, prov.Name())
 	}
-	if err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
+	if err := r.refresh(ctx, prov); err != nil {
 		return nil, err
 	}
-	return readSecret(ctx, prov, timeout)
+	rd, err = readSecret(ctx, prov, timeout)
+	if err != nil {
+		r.refreshFailed[prov.Name()] = true
+	}
+	return rd, err
+}
+
+// refresh asks the person for a new secret, once per provider in a run: after
+// a refresh that failed, the rest of the run (fetch --all) does not ask again
+// for that provider, and its clusters fail at once. A provider that cannot run
+// here is no failed refresh: its command asks instead.
+func (r *Runner) refresh(ctx context.Context, prov secret.Provider) error {
+	if r.refreshFailed == nil {
+		r.refreshFailed = map[string]bool{}
+	}
+	if r.refreshFailed[prov.Name()] {
+		return fmt.Errorf("no secret for provider %s, whose refresh failed earlier in this run; run kcx secret refresh %s, then fetch again", prov.Name(), prov.Name())
+	}
+	err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr)
+	if err != nil && !errors.Is(err, secret.ErrUnavailable) {
+		r.refreshFailed[prov.Name()] = true
+	}
+	return err
 }
 
 // readSecret runs the provider's get within timeout and hands back the secret,

@@ -152,7 +152,9 @@ once more. With no one at a terminal, nothing runs.
 The lockout policy is an invariant: a refused secret is forgotten; if you are
 there, kcx asks once and retries once; a second refusal, or no one to ask,
 stops it; the first refusal during `kcx fetch --all` aborts the rest. Two bad
-logins at most, so an automated run can never lock an account.
+logins at most, so an automated run can never lock an account. A run asks for
+a provider's secret once: after a refresh that failed, the rest of the run's
+clusters for that provider fail at once instead of asking again.
 
 ## Read-only, for AI tools and for yourself
 

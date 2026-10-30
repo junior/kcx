@@ -53,7 +53,7 @@ const fakeBroker = `#!/bin/sh
 cache="$FAKE_CACHE"
 case "$1" in
   get) [ -s "$cache" ] || { echo "nothing cached" >&2; exit 1; }; printf '%s' "$(cat "$cache")" ;;
-  refresh) [ -n "${FAKE_REFRESH_DELAY-}" ] && sleep "$FAKE_REFRESH_DELAY"; IFS= read -r pw; [ -n "$pw" ] || exit 1; printf '%s' "$pw" > "$cache"; printf 'refreshed\n' >> "$FAKE_LOG" ;;
+  refresh) [ -n "${FAKE_REFRESHES-}" ] && printf 'refresh\n' >> "$FAKE_REFRESHES"; [ -n "${FAKE_REFRESH_DELAY-}" ] && sleep "$FAKE_REFRESH_DELAY"; IFS= read -r pw; [ -n "$pw" ] || exit 1; printf '%s' "$pw" > "$cache"; printf 'refreshed\n' >> "$FAKE_LOG" ;;
   forget) rm -f "$cache"; printf 'forgot\n' >> "$FAKE_LOG" ;;
   status) [ -s "$cache" ] && { echo cached; exit 0; } || { echo empty; exit 1; } ;;
 esac
@@ -399,6 +399,48 @@ func TestSecretCacheOff(t *testing.T) {
 	}
 	if _, err := os.Stat(h.cache); !os.IsNotExist(err) {
 		t.Fatal("secret_cache = false must forget after the fetch")
+	}
+}
+
+// One refresh per provider in a run: after a refresh that failed, the rest of
+// fetch --all fails at once instead of asking for every cluster (kob_secret
+// itself refuses a second reveal soon after a failed one).
+func TestOneRefreshPerRun(t *testing.T) {
+	h := newHarness(t, "")
+	refreshes := filepath.Join(t.TempDir(), "refreshes")
+	t.Setenv("FAKE_REFRESHES", refreshes)
+	var clusters []*profile.Cluster
+	for _, n := range []string{"a", "b", "c"} {
+		c, _ := h.set.Lookup(n)
+		clusters = append(clusters, c)
+	}
+	// Nothing cached, someone there, and an empty answer: the refresh fails.
+	done, failed, aborted := h.runner(true, "").Many(context.Background(), h.set, clusters, "", func(c *profile.Cluster) string {
+		return filepath.Join(h.dir, c.Name+".out")
+	}, nil)
+	if aborted || len(done) != 0 || len(failed) != 3 {
+		t.Fatalf("Many: done=%v failed=%v aborted=%v", done, failed, aborted)
+	}
+	if data, _ := os.ReadFile(refreshes); strings.Count(string(data), "refresh") != 1 {
+		t.Fatalf("%q: want one refresh in the run", data)
+	}
+	for _, n := range []string{"b", "c"} {
+		if !strings.Contains(failed[n].Error(), "refresh failed earlier in this run; run kcx secret refresh fake") {
+			t.Fatalf("%s: %v", n, failed[n])
+		}
+	}
+	h.attemptsAre(t, 0)
+
+	// A new run asks again, and a refresh that works lets the run go on.
+	_ = os.Remove(refreshes)
+	done, failed, _ = h.runner(true, "good\n").Many(context.Background(), h.set, clusters, "", func(c *profile.Cluster) string {
+		return filepath.Join(h.dir, c.Name+".out")
+	}, nil)
+	if strings.Join(done, ",") != "a,b,c" || len(failed) != 0 {
+		t.Fatalf("Many after a good refresh: done=%v failed=%v", done, failed)
+	}
+	if data, _ := os.ReadFile(refreshes); strings.Count(string(data), "refresh") != 1 {
+		t.Fatalf("%q: want one refresh, then the cache", data)
 	}
 }
 

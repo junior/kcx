@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -212,7 +213,11 @@ func TestInitCompletionDoctor(t *testing.T) {
 	}
 	writeKubeconfig(t, l.PermFile("stray"), "stray", "stray", "stray", "https://s.example.test", "stray")
 	code, out, errs = runKcx(t, e, "doctor")
-	if code != 1 || !strings.Contains(out, "FIX   "+l.PermFile("alpha")+" is readable by others (mode 644)") || !strings.Contains(out, "sets a current context of its own") || !strings.Contains(errs, "2 problem(s) to fix") {
+	modeLine, problems := "FIX   "+l.PermFile("alpha")+" is readable by others (mode 644)", "2 problem(s) to fix"
+	if runtime.GOOS == "windows" { // no file modes there: the stray context alone
+		modeLine, problems = "", "1 problem(s) to fix"
+	}
+	if code != 1 || !strings.Contains(out, modeLine) || !strings.Contains(out, "sets a current context of its own") || !strings.Contains(errs, problems) {
 		t.Fatalf("doctor with problems: %d %q %q", code, out, errs)
 	}
 	_ = os.Chmod(l.PermFile("alpha"), 0o600)

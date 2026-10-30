@@ -3,6 +3,7 @@ package layout
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -48,7 +49,7 @@ func TestFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if xdg.Profiles != "/x/conf/kcx/profiles" || xdg.Presets != "/x/conf/kind" {
+	if xdg.Profiles != filepath.Join("/x/conf", "kcx", "profiles") || xdg.Presets != filepath.Join("/x/conf", "kind") {
 		t.Fatalf("XDG_CONFIG_HOME not honoured: %+v", xdg)
 	}
 }
@@ -79,7 +80,7 @@ func TestFilesOrderAndFilter(t *testing.T) {
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Files():\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	if k := l.Kubeconfig(); k != strings.Join(want, ":") {
+	if k := l.Kubeconfig(); k != strings.Join(want, string(os.PathListSeparator)) {
 		t.Fatalf("Kubeconfig(): %s", k)
 	}
 }
@@ -94,7 +95,7 @@ func TestEnsure(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != 0o700 {
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 			t.Fatalf("%s mode %o, want 700", d, info.Mode().Perm())
 		}
 	}
@@ -102,7 +103,7 @@ func TestEnsure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("state file mode %o, want 600", info.Mode().Perm())
 	}
 	data, _ := os.ReadFile(l.State)
@@ -124,7 +125,7 @@ func TestEnsure(t *testing.T) {
 		t.Fatal("Ensure overwrote the state file")
 	}
 	info, _ = os.Stat(l.Perm)
-	if info.Mode().Perm()&0o077 != 0 {
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("configs mode %o still open to others", info.Mode().Perm())
 	}
 }
@@ -192,7 +193,7 @@ func TestWriteFileAtomicAndTrash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	if left := DirFiles(l.Perm); len(left) != 1 {

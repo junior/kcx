@@ -85,6 +85,7 @@ type profileFixture struct {
 // address, for a test server.
 func withProfiles(t *testing.T, extraHost string) *profileFixture {
 	t.Helper()
+	needsPOSIX(t)
 	e, l := fixture(t)
 	dir := t.TempDir()
 	f := &profileFixture{env: e, lay: l, dir: dir, cache: filepath.Join(dir, "cache"), attempts: filepath.Join(dir, "attempts")}

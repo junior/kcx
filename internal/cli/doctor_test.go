@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -10,6 +11,9 @@ import (
 // --fix repairs the modes and a cluster file's own current context and says so;
 // findings of one kind across many files fold into one line.
 func TestDoctorFixAndFold(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes: doctor leaves them out on Windows")
+	}
 	e, l := fixture(t)
 	for i := 1; i <= 5; i++ {
 		n := fmt.Sprintf("c%d", i)

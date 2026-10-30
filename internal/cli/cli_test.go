@@ -66,7 +66,7 @@ func TestVersionAndHelp(t *testing.T) {
 
 func TestNoHome(t *testing.T) {
 	code, _, errs := runKcx(t, env{}, "-v")
-	if code != 1 || !strings.Contains(errs, "HOME is not set") {
+	if code != 1 || !strings.Contains(errs, "HOME is not set") && !strings.Contains(errs, "no home directory") {
 		t.Fatalf("no HOME: %d %q", code, errs)
 	}
 }
@@ -85,7 +85,8 @@ func TestEnv(t *testing.T) {
 	code, out, _ := runKcx(t, e, "env")
 	// The layout wins over an inherited KUBECONFIG; the state file is listed first
 	// even before it exists; a quote in a name is escaped for the shell.
-	want := "export KUBECONFIG='" + state + ":" + perm + "/it'\\''s.yaml' KCX_AUTO='" + state + ":" + perm + "/it'\\''s.yaml'\n"
+	list := state + string(os.PathListSeparator) + perm + string(filepath.Separator) + "it'\\''s.yaml"
+	want := "export KUBECONFIG='" + list + "' KCX_AUTO='" + list + "'\n"
 	if code != 0 || out != want {
 		t.Fatalf("env:\n%q\nwant\n%q", out, want)
 	}

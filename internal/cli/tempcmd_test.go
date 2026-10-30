@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -134,7 +135,7 @@ func TestTempCreateLsRmPrune(t *testing.T) {
 		t.Fatalf("temp file: %v %+v", err, cfg)
 	}
 	info, _ := os.Stat(file)
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	if len(f.creates) != 1 || strings.Contains(strings.Join(f.creates[0], " "), "--config") {

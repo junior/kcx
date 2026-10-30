@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -244,7 +245,7 @@ func TestImportCollisionsReplaceAndTrash(t *testing.T) {
 		t.Fatalf("import: %v %q", err, ctx)
 	}
 	info, _ := os.Stat(dest)
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	// The same entries under another file name collide.
@@ -323,7 +324,7 @@ func TestStateFileOnlyOnSwitch(t *testing.T) {
 		t.Fatal("previous not read back")
 	}
 	info, _ := os.Stat(l.Prev)
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("previous file mode %o", info.Mode().Perm())
 	}
 	if err := ClearCurrent(l.State); err != nil {

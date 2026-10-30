@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -116,11 +117,11 @@ func TestPrevious(t *testing.T) {
 		t.Fatal("previous not read back")
 	}
 	info, _ := os.Stat(filepath.Join(l.NSPrev, "alpha"))
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	dinfo, _ := os.Stat(l.NSPrev)
-	if dinfo.Mode().Perm() != 0o700 {
+	if runtime.GOOS != "windows" && dinfo.Mode().Perm() != 0o700 {
 		t.Fatalf("dir mode %o", dinfo.Mode().Perm())
 	}
 }

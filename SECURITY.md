@@ -2,9 +2,11 @@
 
 kcx handles the files that hold your cluster credentials. Please report
 anything that could expose them, or let a read-only shell change a cluster,
-privately: open a report through GitHub's private vulnerability reporting on
-this repository ("Report a vulnerability" under the Security tab). Do not open
-a public issue for it. You should hear back within a week.
+privately, through GitHub's private vulnerability reporting on this
+repository: https://github.com/junior/kcx/security/advisories/new ("Report a
+vulnerability" under the Security tab). Do not open a public issue for it. You
+should hear back within a week, and a fix ships with an advisory that credits
+you if you wish.
 
 ## What kcx promises
 
@@ -28,9 +30,15 @@ a public issue for it. You should hear back within a week.
   another user of the machine, or a web page that rebinds a name to 127.0.0.1,
   cannot use it. It is accident-proof, not adversary-proof: anything running as
   you can still read your kubeconfig files and bypass it with `--kubeconfig`.
+- kcx add says when an imported kubeconfig reaches its cluster over plain
+  http or without TLS verification, or logs in by running a program, and kcx
+  doctor notes the same for every file it manages. Names and addresses read
+  from kubeconfig files reach the terminal with control characters escaped.
 - Release binaries are built from a signed tag by GitHub Actions, carry GitHub
   artifact attestations and an SBOM, and the macOS binaries are signed and
-  notarised when the release has the certificates.
+  notarised when the release has the certificates. From 2.2.0 on a release is
+  immutable once published; release tags cannot be moved or deleted, and the
+  workflows run only actions pinned to a commit.
 
 ## Supported versions
 

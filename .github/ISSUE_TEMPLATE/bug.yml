@@ -1,0 +1,31 @@
+name: Something does not work
+description: kcx did something it should not, or failed to do what it says.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: The command you ran and what it printed. Replace cluster names, servers and anything else you would rather not share.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: kcx -v
+      placeholder: kcx 2.2.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and shell
+      placeholder: macOS 26, zsh 5.9 / Windows 11, PowerShell 7.5 / Ubuntu 24.04, bash 5.2
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: kcx doctor
+      description: Its output, with names and servers replaced as above. Never paste a kubeconfig or a secret.
+      render: text

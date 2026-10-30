@@ -1,4 +1,4 @@
-module github.com/junior/kcx
+module github.com/junior/kcx/v2
 
 go 1.26.0
 

@@ -11,13 +11,13 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/junior/kcx/internal/config"
-	"github.com/junior/kcx/internal/fetch"
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/ns"
-	"github.com/junior/kcx/internal/profile"
-	"github.com/junior/kcx/internal/secret"
+	"github.com/junior/kcx/v2/internal/config"
+	"github.com/junior/kcx/v2/internal/fetch"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/ns"
+	"github.com/junior/kcx/v2/internal/profile"
+	"github.com/junior/kcx/v2/internal/secret"
 )
 
 // probeTimeout bounds the authenticated probe before a switch.

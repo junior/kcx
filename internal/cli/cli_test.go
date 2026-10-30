@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,29 @@ func runKcx(t *testing.T, e env, args ...string) (int, string, string) {
 	var out, errb bytes.Buffer
 	code := Main(args, strings.NewReader(""), &out, &errb, e.get)
 	return code, out.String(), errb.String()
+}
+
+func TestResolveVersion(t *testing.T) {
+	info := func(v string, ok bool) func() (*debug.BuildInfo, bool) {
+		return func() (*debug.BuildInfo, bool) {
+			return &debug.BuildInfo{Main: debug.Module{Path: "github.com/junior/kcx/v2", Version: v}}, ok
+		}
+	}
+	for _, c := range []struct {
+		stamp, module string
+		ok            bool
+		want          string
+	}{
+		{"2.2.0", "v2.2.0", true, "2.2.0"}, // the release build's stamp wins
+		{"", "v2.2.0", true, "2.2.0"},      // go install github.com/junior/kcx/v2/cmd/kcx@v2.2.0
+		{"", "v2.2.1-0.20261030010203-abcdef123456", true, "2.2.1-0.20261030010203-abcdef123456"}, // @main
+		{"", "(devel)", true, "dev"}, // go build in a tree without git
+		{"", "", false, "dev"},
+	} {
+		if got := resolveVersion(c.stamp, info(c.module, c.ok)); got != c.want {
+			t.Errorf("resolveVersion(%q, %q) = %q, want %q", c.stamp, c.module, got, c.want)
+		}
+	}
 }
 
 func TestVersionAndHelp(t *testing.T) {

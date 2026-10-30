@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // Current returns the current context and its namespace ("default" when the

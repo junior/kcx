@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/temp"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/temp"
 )
 
 // fakeEngine stands in for docker and kind: Create writes the kubeconfig kind

@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // Store is the list of files kcx reads, in KUBECONFIG order. Inside a kcx shell

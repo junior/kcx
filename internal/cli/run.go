@@ -12,10 +12,10 @@ import (
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/ns"
-	"github.com/junior/kcx/internal/profile"
-	"github.com/junior/kcx/internal/proxy"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/ns"
+	"github.com/junior/kcx/v2/internal/profile"
+	"github.com/junior/kcx/v2/internal/proxy"
 )
 
 // exitError carries a child process's exit status to Main.

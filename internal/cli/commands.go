@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/picker"
-	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/picker"
+	"github.com/junior/kcx/v2/internal/profile"
 )
 
 // store is what kcx itself reads: the layout, except inside a read-only shell, a

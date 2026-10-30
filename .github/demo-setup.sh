@@ -18,7 +18,7 @@ version=$(git -C "$here" describe --tags --always 2>/dev/null | sed 's/^v//')
 
 mkdir -p "$home/bin" "$home/.kube/configs" "$home/.config/kcx/profiles"
 chmod 700 "$home/.kube" "$home/.kube/configs"
-go build -C "$here" -trimpath -ldflags "-s -w -X github.com/junior/kcx/internal/cli.version=$version" -o "$home/bin/kcx" ./cmd/kcx
+go build -C "$here" -trimpath -ldflags "-s -w -X main.version=$version" -o "$home/bin/kcx" ./cmd/kcx
 
 # The example's acme platform (examples/profiles/acme.toml without the cloud CLIs).
 cat > "$home/.config/kcx/profiles/acme.toml" <<'EOF'

@@ -24,7 +24,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // Template is a string, or a list of strings of which the first that renders to

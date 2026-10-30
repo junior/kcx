@@ -22,7 +22,8 @@ author's dotfiles. Each release carries binaries for macOS, Linux and Windows on
 amd64 and arm64, with an SBOM per archive, cosign-signed checksums and GitHub
 build provenance. Install it with Homebrew, built from source
 (`brew install junior/tap/kcx`), with mise from the release
-(`mise use -g github:junior/kcx@latest`, which verifies the attestation), or
+(`mise use -g github:junior/kcx@latest`, which verifies the attestation), with
+Go (`go install github.com/junior/kcx/v2/cmd/kcx@latest`, from 2.2.0 on), or
 take an archive from the release page. Notarised macOS binaries come later.
 
 ## Why

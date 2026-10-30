@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/junior/kcx/internal/profile"
-	"github.com/junior/kcx/internal/secret"
+	"github.com/junior/kcx/v2/internal/profile"
+	"github.com/junior/kcx/v2/internal/secret"
 )
 
 // DefaultTimeout bounds a provider command that sets none.

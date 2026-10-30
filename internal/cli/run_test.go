@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/ns"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/ns"
 )
 
 func TestRunShadowAndExitCode(t *testing.T) {

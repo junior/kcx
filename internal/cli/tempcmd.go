@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/temp"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/temp"
 )
 
 // newEngine makes the Docker engine; tests replace it with a fake.

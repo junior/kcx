@@ -9,11 +9,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/ns"
-	"github.com/junior/kcx/internal/picker"
-	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/ns"
+	"github.com/junior/kcx/v2/internal/picker"
+	"github.com/junior/kcx/v2/internal/profile"
 )
 
 // sortStrings is sort.Strings, kept here so doctor.go needs no extra import.

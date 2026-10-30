@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/picker"
-	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/v2/internal/picker"
+	"github.com/junior/kcx/v2/internal/profile"
 )
 
 // The drill-down's rows are pure functions over the profile; fzf itself is only

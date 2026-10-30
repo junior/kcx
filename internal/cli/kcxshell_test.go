@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
 )
 
 // fakeShell stands in for $SHELL: it records the variables a kcx shell, a

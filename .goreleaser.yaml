@@ -20,7 +20,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/junior/kcx/internal/cli.version={{ .Version }}
+      - -s -w -X main.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 # One download that fits every Mac, beside the per-architecture builds.

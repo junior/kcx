@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 func writeCluster(t *testing.T, path, name, server string) {

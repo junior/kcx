@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/v2/internal/profile"
 )
 
 // fakeCLI stands in for a platform's get-kubeconfig command: it reads the

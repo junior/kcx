@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/picker"
-	"github.com/junior/kcx/internal/profile"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/picker"
+	"github.com/junior/kcx/v2/internal/profile"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 

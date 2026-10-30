@@ -6,10 +6,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/profile"
-	"github.com/junior/kcx/internal/secret"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/profile"
+	"github.com/junior/kcx/v2/internal/secret"
 )
 
 // cmdDoctor checks the layout, the files, the settings, the profiles and the

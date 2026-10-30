@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 func noenv(string) string { return "" }

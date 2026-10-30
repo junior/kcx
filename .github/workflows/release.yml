@@ -83,8 +83,11 @@ jobs:
             sleep 10
           done
           sha=$(sha256sum /tmp/src.tar.gz | cut -d' ' -f1)
+          # The third expression moves a formula from before 2.2.0 to the version
+          # stamp that 2.2.0 introduced; on a formula already there it does nothing.
           sed -i -e "s|/archive/refs/tags/v[^\"]*\.tar\.gz|/archive/refs/tags/${TAG}.tar.gz|" \
-                 -e "s|sha256 \"[0-9a-f]\{64\}\"|sha256 \"${sha}\"|" Formula/kcx.rb
+                 -e "s|sha256 \"[0-9a-f]\{64\}\"|sha256 \"${sha}\"|" \
+                 -e "s|-X github.com/junior/kcx/internal/cli.version=|-X main.version=|" Formula/kcx.rb
           if git diff --quiet; then
             echo "the formula already points at ${TAG}"
             exit 0

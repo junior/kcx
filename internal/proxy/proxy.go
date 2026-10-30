@@ -63,7 +63,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // Check decides whether a request may pass. It returns the reason when not.

@@ -8,18 +8,36 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 
-	"github.com/junior/kcx/internal/config"
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
-	"github.com/junior/kcx/internal/profile"
-	"github.com/junior/kcx/internal/shell"
-	"github.com/junior/kcx/internal/temp"
+	"github.com/junior/kcx/v2/internal/config"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
+	"github.com/junior/kcx/v2/internal/profile"
+	"github.com/junior/kcx/v2/internal/shell"
+	"github.com/junior/kcx/v2/internal/temp"
 )
 
-// version is stamped by the release build (-X github.com/junior/kcx/internal/cli.version=...).
-var version = "2.0.0-dev"
+// version is what kcx -v prints; main sets it with SetVersion.
+var version = "dev"
+
+// SetVersion sets what kcx -v prints: stamp when the build has one (the release
+// build passes -X main.version=X.Y.Z, a path that no module rename moves), else
+// the module version a go install records (v2.2.0 prints as 2.2.0), else "dev".
+func SetVersion(stamp string) {
+	version = resolveVersion(stamp, debug.ReadBuildInfo)
+}
+
+func resolveVersion(stamp string, buildInfo func() (*debug.BuildInfo, bool)) string {
+	if stamp != "" {
+		return stamp
+	}
+	if bi, ok := buildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return strings.TrimPrefix(bi.Main.Version, "v")
+	}
+	return "dev"
+}
 
 // Environment variable names the shell integration relies on. ~/.zshenv and the
 // `kcx init` snippets read them, so they are part of the contract.

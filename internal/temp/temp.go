@@ -23,7 +23,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // Engine is what kcx asks a Docker engine and kind to do; a fake stands in for

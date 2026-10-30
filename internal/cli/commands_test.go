@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/junior/kcx/internal/kubeconfig"
-	"github.com/junior/kcx/internal/layout"
+	"github.com/junior/kcx/v2/internal/kubeconfig"
+	"github.com/junior/kcx/v2/internal/layout"
 )
 
 // fixture builds a sandbox home with permanent clusters alpha and beta, written

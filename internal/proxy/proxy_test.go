@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -50,6 +51,14 @@ func TestCheckTable(t *testing.T) {
 		{"GET", "/api/v1/namespaces/default/services/web/proxy/", nil, false},
 		{"GET", "/api/v1/nodes/worker-1/proxy/pods", nil, false},
 		{"GET", "/api/v1/nodes/worker-1/proxy/exec/default/web/app", nil, false},
+		// A path that is not clean could read one way here and another way
+		// behind a load balancer that cleans it; a trailing slash is fine.
+		{"GET", "/api/v1/namespaces/default/pods/web/./exec", nil, false},
+		{"GET", "/api/v1/nodes/worker-1/./proxy/pods", nil, false},
+		{"GET", "/api/v1/namespaces/default/pods/x/../web/proxy/", nil, false},
+		{"GET", "/api//v1/nodes/worker-1/proxy/pods", nil, false},
+		{"GET", "/api/v1/namespaces/default/pods/", nil, true},
+		{"GET", "/", nil, true},
 		// Objects that happen to be called exec or proxy stay readable.
 		{"GET", "/api/v1/namespaces/default/configmaps/exec", nil, true},
 		{"GET", "/api/v1/namespaces/proxy/pods", nil, true},
@@ -225,7 +234,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, _ := os.Stat(ro)
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 	cfg, err := clientcmd.LoadFromFile(ro)

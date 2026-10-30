@@ -21,6 +21,9 @@
 //
 // The policy for the requests it answers, in order:
 //
+//  0. a path with dot segments or doubled slashes is refused: the rules below
+//     read its segments, and a load balancer in front of the API server may
+//     clean it into something else on the way;
 //  1. a request carrying an Upgrade header, or Connection: Upgrade, is refused:
 //     exec, attach, port-forward and cp start as a GET that upgrades to a
 //     WebSocket (kubectl 1.31 and later; SPDY before), so a method filter alone
@@ -55,6 +58,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -68,6 +72,9 @@ import (
 
 // Check decides whether a request may pass. It returns the reason when not.
 func Check(r *http.Request) (reason string, allowed bool) {
+	if !cleanPath(r.URL.Path) {
+		return "a path with dot segments or doubled slashes could read one way here and another way behind a proxy that cleans it", false
+	}
 	if isUpgrade(r) {
 		return "exec, attach, port-forward and cp open a session into the cluster", false
 	}
@@ -83,6 +90,21 @@ func Check(r *http.Request) (reason string, allowed bool) {
 		}
 	}
 	return r.Method + " requests change the cluster", false
+}
+
+// cleanPath says whether p is in its clean form, a trailing slash allowed: the
+// rules below read the path's segments as the API server will, and a load
+// balancer in front of it may remove "." and ".." segments and doubled slashes
+// first. kubectl sends clean paths.
+func cleanPath(p string) bool {
+	if p == "" || p == "/" {
+		return true
+	}
+	c := path.Clean(p)
+	if strings.HasSuffix(p, "/") {
+		c += "/"
+	}
+	return c == p
 }
 
 func isUpgrade(r *http.Request) bool {

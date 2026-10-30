@@ -132,14 +132,18 @@ logins at most, so an automated run can never lock an account.
 ## Read-only, for AI tools and for yourself
 
 `kcx -r NAME -- CMD` runs a command, and `kcx -r NAME` opens a shell, whose
-`KUBECONFIG` holds no credentials and points at a local proxy. The proxy
-refuses, before anything leaves the machine: protocol upgrades (exec, attach,
-port-forward, cp), the `proxy` subresource of pods, services and nodes, and
-every method but GET, HEAD and OPTIONS. It allows the authorization and
-authentication reviews, so `kubectl auth can-i` works. kubectl shows a refusal
-as an error naming kcx. A group with `readonly = true` makes `kcx run` use the
-proxy unless `--rw`. Accident-proof, not adversary-proof: anything running as
-you can read the real files and bypass it with `--kubeconfig`.
+`KUBECONFIG` holds none of the cluster's credentials and points at a local
+proxy. The proxy refuses, before anything leaves the machine: protocol
+upgrades (exec, attach, port-forward, cp), the `proxy` subresource of pods,
+services and nodes, impersonation (`--as`), and every method but GET, HEAD
+and OPTIONS. It allows the authorization and authentication reviews, so
+`kubectl auth can-i` works. kubectl shows a refusal as an error naming kcx.
+The proxy speaks TLS and answers only requests that carry a token made for the
+session, which only that `KUBECONFIG`, a file only you can read, holds: on a
+shared machine, another user cannot borrow it. A group with `readonly = true`
+makes `kcx run` use the proxy unless `--rw`. Accident-proof, not
+adversary-proof: anything running as you can read the real files and bypass it
+with `--kubeconfig`.
 
 ## One shell, one cluster
 

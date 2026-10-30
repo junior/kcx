@@ -1,8 +1,12 @@
 package proxy
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +15,8 @@ import (
 	"strings"
 	"testing"
 
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -96,13 +102,29 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	base := "http://" + s.Addr()
+	base := "https://" + s.Addr()
+	_, port, _ := net.SplitHostPort(s.Addr())
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(s.ca) {
+		t.Fatal("the session's CA is not a PEM certificate")
+	}
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
+	// get sends the session's token unless hdr empties Authorization; a Host in
+	// hdr becomes the request's Host.
 	get := func(method, path string, hdr map[string]string) (*http.Response, string) {
 		req, _ := http.NewRequest(method, base+path, strings.NewReader("{}"))
+		req.Header.Set("Authorization", "Bearer "+s.token)
 		for k, v := range hdr {
-			req.Header.Set(k, v)
+			switch {
+			case k == "Host":
+				req.Host = v
+			case v == "":
+				req.Header.Del(k)
+			default:
+				req.Header.Set(k, v)
+			}
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,6 +138,9 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if len(seen) != 1 || !strings.Contains(seen[0], "auth=Bearer not-a-secret") {
 		t.Fatalf("the backend must see the real credentials: %v", seen)
+	}
+	if strings.Contains(seen[0], s.token) {
+		t.Fatalf("the session's token went past the proxy: %v", seen)
 	}
 	host := strings.TrimPrefix(backend.URL, "https://")
 	if !strings.Contains(seen[0], "host="+host) {
@@ -151,9 +176,52 @@ func TestEndToEnd(t *testing.T) {
 	if resp.StatusCode != 405 {
 		t.Fatalf("dry run not refused: %d", resp.StatusCode)
 	}
-	// A kubeconfig for the shell: no credentials, the proxy's address, the renamed context.
+	// Only the shell's own kubeconfig can use the proxy: another user of the
+	// machine has no token, and a page that rebinds a name to 127.0.0.1 has none
+	// either and sends its own name as the Host. Impersonation is refused.
+	for _, c := range []struct {
+		hdr  map[string]string
+		code int
+	}{
+		{map[string]string{"Authorization": ""}, 401},
+		{map[string]string{"Authorization": "Bearer wrong"}, 401},
+		{map[string]string{"Authorization": "Bearer " + s.token + "x"}, 401},
+		{map[string]string{"Authorization": "Basic " + s.token}, 401},
+		{map[string]string{"Host": "rebound.example:" + port}, 403},
+		{map[string]string{"Host": "127.0.0.1:1"}, 403},
+		{map[string]string{"Host": "127.0.0.1"}, 403},
+		{map[string]string{"Impersonate-User": "admin"}, 403},
+		{map[string]string{"Impersonate-Group": "system:masters"}, 403},
+		{map[string]string{"Impersonate-Uid": "1"}, 403},
+		{map[string]string{"Impersonate-Extra-Scopes": "x"}, 403},
+	} {
+		n := len(seen)
+		resp, body := get("GET", "/api/v1/namespaces/default/pods", c.hdr)
+		if resp.StatusCode != c.code || len(seen) != n || !strings.Contains(body, "[kcx] read-only shell") {
+			t.Errorf("%v: %d %s (reached the backend: %v)", c.hdr, resp.StatusCode, body, len(seen) != n)
+		}
+	}
+	if resp, body := get("GET", "/version", map[string]string{"Host": "LocalHost:" + port}); resp.StatusCode != 200 {
+		t.Fatalf("localhost is the proxy too: %d %s", resp.StatusCode, body)
+	}
+	// Plain http, or a client that does not trust the session's CA, gets nowhere.
+	n := len(seen)
+	if resp, err := http.Get("http://" + s.Addr() + "/version"); err == nil {
+		resp.Body.Close()
+		if resp.StatusCode == 200 {
+			t.Fatal("plain http answered")
+		}
+	}
+	if _, err := http.Get(base + "/version"); err == nil {
+		t.Fatal("a client without the session's CA must fail the handshake")
+	}
+	if len(seen) != n {
+		t.Fatal("plain http or an untrusting client reached the backend")
+	}
+	// A kubeconfig for the shell: the session's token and none of the cluster's
+	// credentials, the proxy's address, the renamed context.
 	ro := filepath.Join(home, "readonly.yaml")
-	if err := WriteKubeconfig(ro, "prod", s.Addr()); err != nil {
+	if err := s.WriteKubeconfig(ro); err != nil {
 		t.Fatal(err)
 	}
 	info, _ := os.Stat(ro)
@@ -164,12 +232,31 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.CurrentContext != "prod (READ-ONLY)" || cfg.Clusters["readonly"].Server != "http://"+s.Addr() || len(cfg.AuthInfos["readonly"].Token) != 0 {
+	if cfg.CurrentContext != "prod (READ-ONLY)" || cfg.Clusters["readonly"].Server != "https://"+s.Addr() || string(cfg.Clusters["readonly"].CertificateAuthorityData) != string(s.ca) || cfg.AuthInfos["readonly"].Token != s.token || len(s.token) < 20 {
 		t.Fatalf("read-only kubeconfig: %+v", cfg)
 	}
 	data, _ := os.ReadFile(ro)
 	if strings.Contains(string(data), "not-a-secret") {
 		t.Fatal("the read-only kubeconfig carries a credential")
+	}
+	// What kubectl does with that kubeconfig: client-go sends the token to the
+	// proxy over plain http, and the backend sees the real credentials only.
+	restCfg, err := clientcmd.BuildConfigFromFlags("", ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hc, err := rest.HTTPClientFor(restCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n = len(seen)
+	resp, err = hc.Get(restCfg.Host + "/api/v1/namespaces/default/pods")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || len(seen) != n+1 || !strings.Contains(seen[n], "auth=Bearer not-a-secret") || strings.Contains(seen[n], s.token) {
+		t.Fatalf("client-go through the read-only kubeconfig: %d %v", resp.StatusCode, seen[n:])
 	}
 	// The backend gone: a 502 Status, not a hang.
 	backend.Close()
@@ -181,7 +268,99 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal("Start with an unknown context must fail")
 	}
 	u, _ := url.Parse("https://example.test")
-	if Handler(u, http.DefaultTransport) == nil {
+	if Handler(u, http.DefaultTransport, "127.0.0.1:1", "t") == nil {
 		t.Fatal("Handler")
+	}
+}
+
+// TestOIDCUser is the shape of a platform login: an oidc auth-provider whose
+// id-token has not expired. client-go's provider, like the bearer token, exec
+// and basic ones, adds its credentials only to a request that carries none, so
+// the proxy must drop the session's token for the id-token to reach the server.
+func TestOIDCUser(t *testing.T) {
+	var auth []string
+	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = append(auth, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"NamespaceList","items":[]}`))
+	}))
+	defer backend.Close()
+	enc := base64.RawURLEncoding.EncodeToString
+	idToken := enc([]byte(`{"alg":"none"}`)) + "." + enc([]byte(`{"exp":4102444800,"sub":"jane"}`)) + ".c2ln"
+	kc := filepath.Join(t.TempDir(), "kube.yaml")
+	content := "apiVersion: v1\nkind: Config\nclusters:\n- name: c\n  cluster:\n    server: " + backend.URL +
+		"\n    insecure-skip-tls-verify: true\nusers:\n- name: u\n  user:\n    auth-provider:\n      name: oidc\n      config:\n" +
+		"        client-id: kubernetes\n        idp-issuer-url: https://issuer.invalid\n        id-token: " + idToken +
+		"\n        refresh-token: not-a-secret\ncontexts:\n- name: lab\n  context:\n    cluster: c\n    user: u\n"
+	if err := os.WriteFile(kc, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Start([]string{kc}, "lab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ro := filepath.Join(t.TempDir(), "readonly.yaml")
+	if err := s.WriteKubeconfig(ro); err != nil {
+		t.Fatal(err)
+	}
+	restCfg, err := clientcmd.BuildConfigFromFlags("", ro)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hc, err := rest.HTTPClientFor(restCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := hc.Get(restCfg.Host + "/api/v1/namespaces")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || len(auth) != 1 || auth[0] != "Bearer "+idToken {
+		t.Fatalf("the API server must see the id-token: %d %q", resp.StatusCode, auth)
+	}
+}
+
+func TestForProxyAndToken(t *testing.T) {
+	for _, c := range []struct {
+		host string
+		want bool
+	}{
+		{"127.0.0.1:5000", true},
+		{"localhost:5000", true},
+		{"LOCALHOST:5000", true},
+		{"127.0.0.1:5001", false},
+		{"127.0.0.1", false},
+		{"[::1]:5000", false},
+		{"127.0.0.2:5000", false},
+		{"localhost.rebound.example:5000", false},
+		{"", false},
+	} {
+		if got := forProxy(c.host, "127.0.0.1:5000"); got != c.want {
+			t.Errorf("forProxy(%q) = %v, want %v", c.host, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		header string
+		want   bool
+	}{
+		{"Bearer tok", true},
+		{"bearer tok", true},
+		{"Bearer  tok", true},
+		{"Bearer tok2", false},
+		{"Bearer to", false},
+		{"Bearer", false},
+		{"tok", false},
+		{"Basic tok", false},
+		{"", false},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		if c.header != "" {
+			r.Header.Set("Authorization", c.header)
+		}
+		if got := hasToken(r, "tok"); got != c.want {
+			t.Errorf("hasToken(%q) = %v, want %v", c.header, got, c.want)
+		}
 	}
 }

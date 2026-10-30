@@ -364,7 +364,7 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 	}
 	defer os.RemoveAll(work)
 	ro := filepath.Join(work, "readonly.yaml")
-	if err := proxy.WriteKubeconfig(ro, ctx, srv.Addr()); err != nil {
+	if err := srv.WriteKubeconfig(ro); err != nil {
 		return err
 	}
 	roctx := proxy.ReadonlyContext(ctx)

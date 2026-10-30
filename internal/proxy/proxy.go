@@ -3,9 +3,23 @@
 // request that could change the cluster or open a session into it. It runs on
 // client-go's transport, so exec plugins, OIDC refresh and certificates are
 // handled by the same code kubectl uses, and no credential copy is written
-// anywhere: the shell behind it gets a kubeconfig that holds none.
+// anywhere: the shell behind it gets a kubeconfig that holds none of the
+// cluster's, only a token for the proxy itself.
 //
-// The policy, in order:
+// Who may use it: a port on 127.0.0.1 is open to every user of the machine, and
+// to a web page that rebinds a name of its own to 127.0.0.1. So the proxy
+// answers only a request addressed to it (Host 127.0.0.1:PORT or
+// localhost:PORT) that carries the session's token, a random value kept in this
+// process and in the shell's kubeconfig, a file only the user can read. The
+// token stops at the proxy: the API server sees the user's own credentials.
+// kubectl sends credentials only to a server it reaches over TLS, so the proxy
+// speaks TLS with a certificate made for the session by a CA made for the
+// session, whose keys never leave this process; the shell's kubeconfig trusts
+// that CA and nothing else.
+// A request that impersonates (kubectl --as, --as-group, --as-uid) is refused
+// too, since through the proxy it would act as someone else.
+//
+// The policy for the requests it answers, in order:
 //
 //  1. a request carrying an Upgrade header, or Connection: Upgrade, is refused:
 //     exec, attach, port-forward and cp start as a GET that upgrades to a
@@ -24,8 +38,19 @@ package proxy
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -133,12 +158,14 @@ func isReview(path string) bool {
 // Server is a running read-only proxy for one context.
 type Server struct {
 	Context  string
+	token    string
+	ca       []byte // the session's CA certificate, PEM
 	listener net.Listener
 	srv      *http.Server
 }
 
-// Start builds the transport for context name from files and serves on
-// 127.0.0.1 on a free port.
+// Start builds the transport for context name from files and serves TLS on
+// 127.0.0.1 on a free port, for requests that carry a token of its own.
 func Start(files []string, name string) (*Server, error) {
 	rules := &clientcmd.ClientConfigLoadingRules{Precedence: files}
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: name})
@@ -157,14 +184,77 @@ func Start(files []string, name string) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot build the transport for %s: %w", name, err)
 	}
-	handler := Handler(target, transport)
+	cert, ca, err := certificates()
+	if err != nil {
+		return nil, fmt.Errorf("cannot make the read-only proxy's certificate: %w", err)
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{Context: name, listener: ln, srv: &http.Server{Handler: handler, ReadHeaderTimeout: 30 * time.Second}}
-	go func() { _ = s.srv.Serve(ln) }()
+	token := rand.Text()
+	s := &Server{Context: name, token: token, ca: ca, listener: ln, srv: &http.Server{
+		Handler:           Handler(target, transport, ln.Addr().String(), token),
+		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		ReadHeaderTimeout: 30 * time.Second,
+		// A failed handshake (a port scan, a plain http request) is not news for
+		// the shell's terminal.
+		ErrorLog: log.New(io.Discard, "", 0),
+	}}
+	go func() { _ = s.srv.ServeTLS(ln, "", "") }()
 	return s, nil
+}
+
+// certificates makes the proxy's TLS identity: a CA, and a certificate for
+// 127.0.0.1 and localhost that it signs, with the CA's certificate in PEM for
+// the shell's kubeconfig. Both keys stay in this process.
+func certificates() (tls.Certificate, []byte, error) {
+	now := time.Now()
+	serial := func() *big.Int {
+		n, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
+		return n
+	}
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	caTmpl := &x509.Certificate{
+		SerialNumber:          serial(),
+		Subject:               pkix.Name{CommonName: "kcx read-only proxy CA"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: serial(),
+		Subject:      pkix.Name{CommonName: "kcx read-only proxy"},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.Add(365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+		DNSNames:     []string{"localhost"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caKey)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key},
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), nil
 }
 
 // Addr is where the proxy listens, host:port.
@@ -177,24 +267,88 @@ func (s *Server) Close() error {
 	return s.srv.Shutdown(ctx)
 }
 
-// Handler is the guarded reverse proxy for target over transport.
-func Handler(target *url.URL, transport http.RoundTripper) http.Handler {
+// Handler is the guarded reverse proxy for target over transport. It answers
+// only requests addressed to addr, the host:port it listens on, that carry
+// token as their bearer token.
+func Handler(target *url.URL, transport http.RoundTripper, addr, token string) http.Handler {
 	rp := &httputil.ReverseProxy{
 		// SetURL sends the request to the API server's scheme, host and base path,
-		// and rewrites the Host header to match, which TLS needs.
-		Rewrite:   func(pr *httputil.ProxyRequest) { pr.SetURL(target) },
+		// and rewrites the Host header to match, which TLS needs. The session's
+		// token goes no further: client-go's transport adds the user's own
+		// credentials only to a request that carries none.
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.Out.Header.Del("Authorization")
+			pr.SetURL(target)
+		},
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeStatus(w, http.StatusBadGateway, metav1.StatusReasonServiceUnavailable, "[kcx] read-only shell: the API server did not answer: "+err.Error())
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !forProxy(r.Host, addr) {
+			writeText(w, http.StatusForbidden, "[kcx] read-only shell: a request addressed to another host; this proxy answers only 127.0.0.1 and localhost")
+			return
+		}
+		if !hasToken(r, token) {
+			writeText(w, http.StatusUnauthorized, "[kcx] read-only shell: a request without the shell's token; only the read-only shell's own kubeconfig can use this proxy")
+			return
+		}
+		if impersonates(r) {
+			writeText(w, http.StatusForbidden, "[kcx] read-only shell: impersonation (--as, --as-group, --as-uid) would act as someone else with your credentials; refused before leaving the machine")
+			return
+		}
 		if reason, ok := Check(r); !ok {
 			writeStatus(w, http.StatusMethodNotAllowed, metav1.StatusReasonMethodNotAllowed, "[kcx] read-only shell: "+reason+"; refused before leaving the machine")
 			return
 		}
 		rp.ServeHTTP(w, r)
 	})
+}
+
+// forProxy says whether host, a request's Host, names the proxy itself: its
+// port, on 127.0.0.1 or localhost. A page that rebinds a name of its own to
+// 127.0.0.1 still sends that name.
+func forProxy(host, addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	h, p, err := net.SplitHostPort(host)
+	if err != nil || p != port {
+		return false
+	}
+	return h == "127.0.0.1" || strings.EqualFold(h, "localhost")
+}
+
+// hasToken says whether r carries token as its bearer token, compared in
+// constant time.
+func hasToken(r *http.Request, token string) bool {
+	scheme, value, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(value)), []byte(token)) == 1
+}
+
+// impersonates says whether r asks to act as another user, group or uid.
+func impersonates(r *http.Request) bool {
+	for k := range r.Header {
+		if strings.HasPrefix(strings.ToLower(k), "impersonate-") {
+			return true
+		}
+	}
+	return false
+}
+
+// writeText answers in plain text, which kubectl shows as the error's message
+// even on its first discovery request, where it cannot decode a Status: a
+// request turned away before the policy applies fails there first.
+func writeText(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+	_, _ = io.WriteString(w, message+"\n")
 }
 
 // writeStatus answers with a Kubernetes Status object, which kubectl renders as
@@ -216,15 +370,16 @@ func writeStatus(w http.ResponseWriter, code int, reason metav1.StatusReason, me
 // prompts and tools show the mode at a glance.
 func ReadonlyContext(name string) string { return name + " (READ-ONLY)" }
 
-// WriteKubeconfig writes the kubeconfig the read-only shell uses: no credentials,
-// one cluster pointing at the proxy, the context renamed. Mode 0600, so that a
-// namespace change inside the shell (kcx ns, or kubectl config) lands in this
-// file and nowhere else; there is nothing in it to protect.
-func WriteKubeconfig(path, name, addr string) error {
+// WriteKubeconfig writes the kubeconfig the read-only shell uses: one cluster
+// pointing at the proxy and trusting the session's CA, a user holding the
+// session's token and none of the cluster's credentials, the context renamed.
+// Mode 0600, so that no one else can read the token; a namespace change inside
+// the shell (kcx ns, or kubectl config) lands in this file and nowhere else.
+func (s *Server) WriteKubeconfig(path string) error {
 	cfg := clientcmdapi.NewConfig()
-	cfg.Clusters["readonly"] = &clientcmdapi.Cluster{Server: "http://" + addr}
-	cfg.AuthInfos["readonly"] = &clientcmdapi.AuthInfo{}
-	ro := ReadonlyContext(name)
+	cfg.Clusters["readonly"] = &clientcmdapi.Cluster{Server: "https://" + s.Addr(), CertificateAuthorityData: s.ca}
+	cfg.AuthInfos["readonly"] = &clientcmdapi.AuthInfo{Token: s.token}
+	ro := ReadonlyContext(s.Context)
 	cfg.Contexts[ro] = &clientcmdapi.Context{Cluster: "readonly", AuthInfo: "readonly"}
 	cfg.CurrentContext = ro
 	data, err := clientcmd.Write(*cfg)

@@ -15,13 +15,19 @@ a public issue for it. You should hear back within a week.
 - A secret handed to a fetch provider travels through a pipe from the secret
   provider's standard output to the fetch command's standard input: never a
   command-line argument, never an environment variable, never printed.
-- The read-only shell (`kcx -r`) refuses, before anything leaves the machine,
-  every request other than GET, HEAD and OPTIONS, the protocol upgrades that
-  start exec, attach, port-forward and cp, the `proxy` subresource of pods,
-  services and nodes, and server-side dry runs; it allows the authorization and
-  authentication review requests. It is accident-proof, not adversary-proof:
-  anything running as you can still read your kubeconfig files and bypass it
-  with `--kubeconfig`.
+- The read-only shell (`kcx -r`, and `kcx run` or `kcx shell` on a read-only
+  group) reaches the cluster through a local proxy that refuses, before
+  anything leaves the machine, every request other than GET, HEAD and OPTIONS,
+  the protocol upgrades that start exec, attach, port-forward and cp, the
+  `proxy` subresource of pods, services and nodes, server-side dry runs and
+  impersonation; it allows the authorization and authentication review
+  requests.
+- That proxy listens on 127.0.0.1, speaks TLS with a certificate made for the
+  session, and answers only requests addressed to it that carry the session's
+  token, which only the shell's kubeconfig holds, in a file only you can read:
+  another user of the machine, or a web page that rebinds a name to 127.0.0.1,
+  cannot use it. It is accident-proof, not adversary-proof: anything running as
+  you can still read your kubeconfig files and bypass it with `--kubeconfig`.
 - Release binaries are built from a signed tag by GitHub Actions, carry GitHub
   artifact attestations and an SBOM, and the macOS binaries are signed and
   notarised when the release has the certificates.

@@ -111,7 +111,8 @@ func TestReadonlyRunAndShellEnv(t *testing.T) {
 	if !strings.HasPrefix(out, "alpha (READ-ONLY)|") {
 		t.Fatalf("KCX_RO: %q", out)
 	}
-	if !strings.Contains(out, "server: http://127.0.0.1:") || strings.Contains(out, "not-a-secret") || !strings.Contains(out, "current-context: alpha (READ-ONLY)") || !strings.HasSuffix(out, "|unset") {
+	if !strings.Contains(out, "server: https://127.0.0.1:") || !strings.Contains(out, "certificate-authority-data: ") || !strings.Contains(out, "token: ") ||
+		strings.Contains(out, "not-a-secret") || !strings.Contains(out, "current-context: alpha (READ-ONLY)") || !strings.HasSuffix(out, "|unset") {
 		t.Fatalf("read-only kubeconfig handed to the command: %q", out)
 	}
 	if !strings.Contains(errs, "read-only run on alpha (READ-ONLY)") {

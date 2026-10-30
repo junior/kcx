@@ -4,7 +4,7 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
-## 2.2.0-rc.1 (2026-10-29)
+## 2.2.0 (2026-10-29)
 
 ### Added
 
@@ -69,6 +69,12 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   cannot be moved or deleted, the workflows run only actions pinned to a
   commit, and the release's secrets live in an environment that only release
   tags reach.
+
+## 2.2.0-rc.1 (2026-10-29)
+
+The candidate for 2.2.0, with the same changes. It tried the release's new
+protections first: an immutable release, the release environment and a
+pinned GoReleaser.
 
 ## 2.1.2 (2026-10-29)
 

@@ -12,6 +12,7 @@ import (
 	"github.com/junior/kcx/v2/internal/kubeconfig"
 	"github.com/junior/kcx/v2/internal/layout"
 	"github.com/junior/kcx/v2/internal/temp"
+	"github.com/junior/kcx/v2/internal/tty"
 )
 
 // newEngine makes the Docker engine; tests replace it with a fake.
@@ -407,13 +408,13 @@ func (a *App) tempWizard() error {
 			}
 			step = "name"
 		case "name":
-			tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+			t, err := tty.Open()
 			if err != nil {
 				return fmt.Errorf("no terminal to ask the name on")
 			}
-			fmt.Fprint(tty, "Name for the temp cluster (lowercase, digits, - and .; empty goes back): ")
-			name, _ := bufio.NewReader(tty).ReadString('\n')
-			_ = tty.Close()
+			fmt.Fprint(t.Out, "Name for the temp cluster (lowercase, digits, - and .; empty goes back): ")
+			name, _ := bufio.NewReader(t.In).ReadString('\n')
+			_ = t.Close()
 			name = strings.TrimSpace(name)
 			if name == "" {
 				step = "config"

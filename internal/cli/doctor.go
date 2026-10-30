@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/junior/kcx/v2/internal/kubeconfig"
@@ -38,7 +39,9 @@ func (a *App) cmdDoctor(args []string) error {
 		fmt.Fprintf(a.stdout, "FIX   "+format+"\n", v...)
 	}
 
-	// The layout.
+	// The layout. File modes mean nothing on Windows, where the profile
+	// directory's permissions keep ~/.kube private.
+	unixModes := runtime.GOOS != "windows"
 	for _, d := range []string{a.lay.Dir, a.lay.Perm, a.lay.Temp} {
 		info, err := os.Stat(d)
 		switch {
@@ -46,7 +49,7 @@ func (a *App) cmdDoctor(args []string) error {
 			note("%s does not exist yet; kcx creates it when needed", d)
 		case !info.IsDir():
 			problem("%s is not a directory", d)
-		case info.Mode().Perm()&0o077 != 0:
+		case unixModes && info.Mode().Perm()&0o077 != 0:
 			problem("%s is readable by others (mode %o); chmod 700 %s, or kcx doctor --fix", d, info.Mode().Perm(), d)
 		default:
 			ok("%s is private", d)
@@ -54,7 +57,7 @@ func (a *App) cmdDoctor(args []string) error {
 	}
 	if info, err := os.Stat(a.lay.State); err != nil {
 		note("%s does not exist yet (the state file); kcx NAME creates it", a.lay.State)
-	} else if info.Mode().Perm()&0o077 != 0 {
+	} else if unixModes && info.Mode().Perm()&0o077 != 0 {
 		problem("%s is readable by others (mode %o); chmod 600 %s, or kcx doctor --fix", a.lay.State, info.Mode().Perm(), a.lay.State)
 	} else {
 		ok("%s is the state file, private", a.lay.State)
@@ -62,7 +65,7 @@ func (a *App) cmdDoctor(args []string) error {
 	var loose []string
 	for _, f := range append(layout.DirFiles(a.lay.Perm), layout.DirFiles(a.lay.Temp)...) {
 		info, err := os.Stat(f)
-		if err == nil && info.Mode().Perm()&0o077 != 0 {
+		if err == nil && unixModes && info.Mode().Perm()&0o077 != 0 {
 			if len(loose) < 3 {
 				problem("%s is readable by others (mode %o); chmod 600 %s, or kcx doctor --fix", f, info.Mode().Perm(), f)
 			}
@@ -192,9 +195,10 @@ func (a *App) cmdDoctor(args []string) error {
 // comments and key order in it do not survive.
 func (a *App) doctorFix() error {
 	fixed := func(format string, v ...any) { fmt.Fprintf(a.stdout, "fixed "+format+"\n", v...) }
+	unixModes := runtime.GOOS != "windows"
 	for _, d := range []string{a.lay.Dir, a.lay.Perm, a.lay.Temp} {
 		info, err := os.Stat(d)
-		if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 == 0 {
+		if err != nil || !info.IsDir() || !unixModes || info.Mode().Perm()&0o077 == 0 {
 			continue
 		}
 		if err := os.Chmod(d, 0o700); err != nil {
@@ -206,7 +210,7 @@ func (a *App) doctorFix() error {
 	files = append(files, layout.DirFiles(a.lay.Temp)...)
 	for _, f := range files {
 		info, err := os.Stat(f)
-		if err != nil || info.Mode().Perm()&0o077 == 0 {
+		if err != nil || !unixModes || info.Mode().Perm()&0o077 == 0 {
 			continue
 		}
 		if err := os.Chmod(f, 0o600); err != nil {

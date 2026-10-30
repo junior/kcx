@@ -27,6 +27,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/junior/kcx/v2/internal/tty"
 )
 
 // Provider is a source of one secret.
@@ -220,13 +222,13 @@ func (p *Prompt) ask(label string) ([]byte, error) {
 		}
 		return stripPaste(line), nil
 	}
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	t, err := tty.Open()
 	if err != nil {
 		return nil, errors.New("no terminal to ask for the secret on; run this from a terminal, or configure a secret provider that caches")
 	}
-	defer tty.Close()
+	defer t.Close()
 	fmt.Fprint(errw, label)
-	value, err := term.ReadPassword(int(tty.Fd()))
+	value, err := term.ReadPassword(int(t.In.Fd()))
 	fmt.Fprintln(errw)
 	if err != nil {
 		return nil, err

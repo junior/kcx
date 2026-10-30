@@ -131,10 +131,15 @@ func (a *App) run(args []string) error {
 		fmt.Fprintf(a.stdout, "kcx %s\n", version)
 		return nil
 	case "env":
-		if len(args) != 1 {
-			return usagef("kcx env takes no arguments")
+		switch {
+		case len(args) == 1:
+			return a.cmdEnv(false)
+		case len(args) == 2 && (args[1] == "pwsh" || args[1] == "powershell"):
+			return a.cmdEnv(true)
+		case len(args) == 2 && (args[1] == "zsh" || args[1] == "bash" || args[1] == "sh"):
+			return a.cmdEnv(false)
 		}
-		return a.cmdEnv()
+		return usagef("kcx env [pwsh]")
 	case "__complete":
 		return a.cmdComplete(args[1:])
 	case "":
@@ -153,9 +158,10 @@ func (a *App) run(args []string) error {
 	case "-r", "--readonly":
 		return a.cmdReadonly(args[1:])
 	case "init":
-		return a.cmdSnippet(shell.Init, "kcx init zsh|bash", args[1:])
+		initFor := func(sh string) (string, error) { return shell.Init(sh, a.lay.Dir) }
+		return a.cmdSnippet(initFor, "kcx init zsh|bash|pwsh", args[1:])
 	case "completion":
-		return a.cmdSnippet(shell.Completion, "kcx completion zsh|bash", args[1:])
+		return a.cmdSnippet(shell.Completion, "kcx completion zsh|bash|pwsh", args[1:])
 	case "doctor":
 		return a.cmdDoctor(args[1:])
 	case "temp":
@@ -190,29 +196,41 @@ func (a *App) run(args []string) error {
 	return a.cmdSwitchArgs(args)
 }
 
-// cmdEnv prints the export line for shells other than zsh. A read-only shell's,
-// a kcx shell's or a run's KUBECONFIG is the point of it: a startup file that
-// evals this must get that one back, never the shared or the real one.
-func (a *App) cmdEnv() error {
+// cmdEnv prints the export line for shells other than zsh, or with pwsh,
+// PowerShell's $env: assignments. A read-only shell's, a kcx shell's or a run's
+// KUBECONFIG is the point of it: a startup file that evals this must get that
+// one back, never the shared or the real one.
+func (a *App) cmdEnv(pwsh bool) error {
+	var kv []string // name, value, name, value...
 	switch {
 	case a.getenv(EnvRO) != "":
 		v := a.getenv(EnvROConfig)
 		if v == "" {
 			v = a.getenv("KUBECONFIG")
 		}
-		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(v))
+		kv = []string{"KUBECONFIG", v}
 	case a.getenv(EnvShell) != "":
 		k := a.getenv(EnvShell) + string(os.PathListSeparator) + a.lay.Kubeconfig()
-		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s %s=%s\n", shellQuote(k), EnvShellAuto, shellQuote(k))
+		kv = []string{"KUBECONFIG", k, EnvShellAuto, k}
 	case a.getenv(EnvRunConfig) != "":
-		k := a.getenv(EnvRunConfig) + string(os.PathListSeparator) + a.lay.Kubeconfig()
-		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(k))
+		kv = []string{"KUBECONFIG", a.getenv(EnvRunConfig) + string(os.PathListSeparator) + a.lay.Kubeconfig()}
 	case a.getenv(EnvRun) != "":
-		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s\n", shellQuote(a.getenv("KUBECONFIG")))
+		kv = []string{"KUBECONFIG", a.getenv("KUBECONFIG")}
 	default:
 		k := a.lay.Kubeconfig()
-		fmt.Fprintf(a.stdout, "export KUBECONFIG=%s %s=%s\n", shellQuote(k), EnvAuto, shellQuote(k))
+		kv = []string{"KUBECONFIG", k, EnvAuto, k}
 	}
+	if pwsh {
+		for i := 0; i < len(kv); i += 2 {
+			fmt.Fprintf(a.stdout, "$env:%s = %s\n", kv[i], shell.PwshQuote(kv[i+1]))
+		}
+		return nil
+	}
+	line := "export"
+	for i := 0; i < len(kv); i += 2 {
+		line += " " + kv[i] + "=" + shellQuote(kv[i+1])
+	}
+	fmt.Fprintln(a.stdout, line)
 	return nil
 }
 
@@ -307,6 +325,11 @@ func (a *App) cmdComplete(words []string) error {
 		if len(words) == 1 {
 			fmt.Fprintln(a.stdout, "zsh")
 			fmt.Fprintln(a.stdout, "bash")
+			fmt.Fprintln(a.stdout, "pwsh")
+		}
+	case "env":
+		if len(words) == 1 {
+			fmt.Fprintln(a.stdout, "pwsh")
 		}
 	case "temp":
 		sub := ""

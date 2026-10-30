@@ -97,10 +97,13 @@ Temp clusters, kind, one file each in ~/.kube/temp
                               keep another tool's temp cluster (k3d, minikube) here
 
 Shell and setup
-  kcx env                     print the KUBECONFIG export line, for shells other than zsh
-  kcx init zsh|bash           the shell snippet: eval "$(kcx init zsh)" keeps KUBECONFIG
-                              in step and installs completion
-  kcx completion zsh|bash     the completion part alone
+  kcx env [pwsh]              print the KUBECONFIG export line, for shells other than zsh;
+                              pwsh prints PowerShell's $env: assignments
+  kcx init zsh|bash|pwsh      the shell snippet: eval "$(kcx init zsh)" keeps KUBECONFIG
+                              in step and installs completion; in PowerShell,
+                              kcx init pwsh | Out-String | Invoke-Expression
+  kcx completion zsh|bash|pwsh
+                              the completion part alone
   kcx doctor [--fix]          check the layout, the files, the settings, the profiles
                               and the programs kcx relies on; --fix first repairs the
                               modes and a current context a cluster file sets of its own

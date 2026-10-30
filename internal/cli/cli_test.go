@@ -101,8 +101,56 @@ func TestEnv(t *testing.T) {
 	if code != 0 || out != "export KUBECONFIG='/tmp/run.json:"+state+"'\n" {
 		t.Fatalf("env in run: %d %q", code, out)
 	}
-	if code, _, errs := runKcx(t, e, "env", "extra"); code != 2 || !strings.Contains(errs, "takes no arguments") {
+	if code, _, errs := runKcx(t, e, "env", "extra"); code != 2 || !strings.Contains(errs, "kcx env [pwsh]") {
 		t.Fatalf("env extra: %d %q", code, errs)
+	}
+	// PowerShell's form: $env: assignments, single quotes doubled inside.
+	code, out, _ = runKcx(t, ro, "env", "pwsh")
+	if code != 0 || out != "$env:KUBECONFIG = '/tmp/ro.json'\n" {
+		t.Fatalf("env pwsh in RO shell: %d %q", code, out)
+	}
+	quoted := env{"HOME": filepath.Join(t.TempDir(), "o'neil")}
+	code, out, _ = runKcx(t, quoted, "env", "pwsh")
+	want = filepath.Join(quoted["HOME"], ".kube", "config")
+	want = "$env:KUBECONFIG = '" + strings.ReplaceAll(want, "'", "''") + "'\n$env:KCX_AUTO = '" + strings.ReplaceAll(want, "'", "''") + "'\n"
+	if code != 0 || out != want {
+		t.Fatalf("env pwsh: %d %q, want %q", code, out, want)
+	}
+	if code, out, _ = runKcx(t, quoted, "env", "bash"); code != 0 || !strings.HasPrefix(out, "export KUBECONFIG=") {
+		t.Fatalf("env bash: %d %q", code, out)
+	}
+}
+
+func TestPickShell(t *testing.T) {
+	look := func(found ...string) func(string) (string, error) {
+		return func(name string) (string, error) {
+			for _, f := range found {
+				if f == name {
+					return `C:\found\` + name, nil
+				}
+			}
+			return "", os.ErrNotExist
+		}
+	}
+	vars := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	for _, c := range []struct {
+		goos  string
+		env   map[string]string
+		found []string
+		want  string
+	}{
+		{"darwin", map[string]string{"SHELL": "/bin/zsh"}, nil, "/bin/zsh"},
+		{"linux", nil, nil, "/bin/sh"},
+		// Windows: Git Bash's MSYS path cannot start, its base name can.
+		{"windows", map[string]string{"SHELL": "/usr/bin/bash"}, []string{"bash", "pwsh.exe"}, `C:\found\bash`},
+		{"windows", nil, []string{"pwsh.exe", "powershell.exe"}, `C:\found\pwsh.exe`},
+		{"windows", nil, []string{"powershell.exe"}, `C:\found\powershell.exe`},
+		{"windows", map[string]string{"COMSPEC": `C:\Windows\system32\cmd.exe`}, []string{`C:\Windows\system32\cmd.exe`}, `C:\found\C:\Windows\system32\cmd.exe`},
+		{"windows", nil, nil, "cmd.exe"},
+	} {
+		if got := pickShell(c.goos, vars(c.env), look(c.found...)); got != c.want {
+			t.Errorf("pickShell(%s, %v, %v) = %q, want %q", c.goos, c.env, c.found, got, c.want)
+		}
 	}
 }
 

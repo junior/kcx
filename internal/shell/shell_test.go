@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -12,6 +13,9 @@ import (
 // /bin/bash is 3.2, the one the snippets must still run in.
 func shells(t *testing.T) map[string]string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the bash and zsh snippets are tested on Unix; Git Bash's paths are not Windows'")
+	}
 	found := map[string]string{}
 	for _, candidate := range []string{"/bin/bash", "bash", "zsh"} {
 		p, err := exec.LookPath(candidate)
@@ -62,7 +66,7 @@ func TestInitComputesKubeconfig(t *testing.T) {
 	}, ":")
 	base := []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	for sh, kind := range shells(t) {
-		snippet, err := Init(kind)
+		snippet, err := Init(kind, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +102,7 @@ func TestInitComputesKubeconfig(t *testing.T) {
 }
 
 func TestUnknownShell(t *testing.T) {
-	if _, err := Init("fish"); err == nil {
+	if _, err := Init("fish", ""); err == nil {
 		t.Fatal("fish is not supported yet")
 	}
 	if _, err := Completion("tcsh"); err == nil {
@@ -135,7 +139,7 @@ func TestInitInsideKcxShell(t *testing.T) {
 	want := private + ":" + layoutList
 	base := []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "KCX_SHELL=" + private}
 	for sh, kind := range shells(t) {
-		snippet, _ := Init(kind)
+		snippet, _ := Init(kind, "")
 		got := runSnippet(t, sh, kind, snippet, `printf '%s|%s|%s' "$KUBECONFIG" "$KCX_SHELL_AUTO" "${KCX_AUTO-unset}"`, base)
 		if got != want+"|"+want+"|unset" {
 			t.Errorf("%s: fresh kcx shell: %q", sh, got)
@@ -156,7 +160,7 @@ func TestInitInsideKcxShell(t *testing.T) {
 // `zsh -c` started inside the shell would run against the shared context.
 func TestOlderInlineCopyLeavesKcxShellAlone(t *testing.T) {
 	zsh, err := exec.LookPath("zsh")
-	if err != nil {
+	if err != nil || runtime.GOOS == "windows" {
 		t.Skip("no zsh")
 	}
 	home, layoutList := layoutHome(t)
@@ -194,7 +198,7 @@ func TestRestoreOnce(t *testing.T) {
 		{[]string{"KCX_RUN=x", "KCX_RUN_CONFIG=" + run}, run + ":" + layoutList},
 	}
 	for sh, kind := range shells(t) {
-		snippet, _ := Init(kind)
+		snippet, _ := Init(kind, "")
 		for _, c := range cases {
 			env := append(append([]string{}, base...), c.env...)
 			// A startup file clobbers KUBECONFIG; the first prompt restores it;
@@ -213,7 +217,7 @@ func TestHooksComeFirst(t *testing.T) {
 	home, _ := layoutHome(t)
 	private := filepath.Join(t.TempDir(), "config.yaml")
 	for sh, kind := range shells(t) {
-		snippet, _ := Init(kind)
+		snippet, _ := Init(kind, "")
 		var args []string
 		var show string
 		if kind == "zsh" {

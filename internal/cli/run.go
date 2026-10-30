@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -177,10 +178,7 @@ func (a *App) cmdShell(args []string) error {
 	// only KCX_AUTO (an older ~/.zshenv) then leaves this KUBECONFIG alone.
 	env := withoutEnv(os.Environ(), scoped...)
 	env = append(env, "KUBECONFIG="+list, EnvShell+"="+private, EnvShellAuto+"="+list)
-	sh := a.getenv("SHELL")
-	if sh == "" {
-		sh = "/bin/sh"
-	}
+	sh := a.userShell()
 	a.say("kcx shell for %s: kcx NAME, kcx ns and kubectl config changes stay in this shell; exit to leave", ctx)
 	err = a.exec([]string{sh}, env)
 	a.say("kcx shell closed")
@@ -396,10 +394,7 @@ func (a *App) readonly(ctx, namespace string, cmd []string) error {
 		a.warn("read-only run on %s", roctx)
 		return a.exec(cmd, env)
 	}
-	shell := a.getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
+	shell := a.userShell()
 	a.say("READ-ONLY shell for %s; exit to leave", ctx)
 	a.say("reads work; writes, exec, attach, port-forward and cp are refused by a local proxy")
 	err = a.exec([]string{shell}, env)
@@ -464,6 +459,39 @@ func (a *App) exec(cmd []string, env []string) error {
 		return fmt.Errorf("cannot run %s: %w", cmd[0], err)
 	}
 	return nil
+}
+
+// userShell is the shell a kcx shell or a read-only shell starts.
+func (a *App) userShell() string {
+	return pickShell(runtime.GOOS, a.getenv, exec.LookPath)
+}
+
+// pickShell is SHELL, or /bin/sh when it is unset. On Windows, where SHELL is
+// rarely set and Git Bash sets it to a path such as /usr/bin/bash that a
+// Windows program cannot start, it is the first that can be found of SHELL, its
+// base name, PowerShell 7, Windows PowerShell and COMSPEC (cmd.exe).
+func pickShell(goos string, getenv func(string) string, lookPath func(string) (string, error)) string {
+	sh := getenv("SHELL")
+	if goos != "windows" {
+		if sh == "" {
+			return "/bin/sh"
+		}
+		return sh
+	}
+	var candidates []string
+	if sh != "" {
+		candidates = append(candidates, sh, filepath.Base(sh))
+	}
+	candidates = append(candidates, "pwsh.exe", "powershell.exe")
+	if c := getenv("COMSPEC"); c != "" {
+		candidates = append(candidates, c)
+	}
+	for _, c := range candidates {
+		if p, err := lookPath(c); err == nil {
+			return p
+		}
+	}
+	return "cmd.exe"
 }
 
 // exitCode is the child's exit status or, when a signal ended it, 128 plus the

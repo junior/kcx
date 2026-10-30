@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -45,10 +46,14 @@ type Layout struct {
 // Getenv is the shape of os.Getenv, passed in so tests can supply an environment.
 type Getenv func(string) string
 
-// FromEnv builds the layout from HOME and XDG_CONFIG_HOME.
+// FromEnv builds the layout from the home directory kubectl uses (HomeDir) and
+// XDG_CONFIG_HOME.
 func FromEnv(getenv Getenv) (Layout, error) {
-	home := getenv("HOME")
+	home := HomeDir(runtime.GOOS, getenv)
 	if home == "" {
+		if runtime.GOOS == "windows" {
+			return Layout{}, errors.New("no home directory: HOME, USERPROFILE, HOMEDRIVE and HOMEPATH are all unset")
+		}
 		return Layout{}, errors.New("HOME is not set")
 	}
 	conf := getenv("XDG_CONFIG_HOME")
@@ -243,16 +248,28 @@ func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 		cleanup()
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := rename(tmp, path); err != nil {
 		cleanup()
 		return err
 	}
 	return nil
 }
 
-// Trash moves files to the Trash, never deletes them: macOS's /usr/bin/trash,
-// else gio trash, else a refusal that names the files. KCX_TRASH_DIR (tests) is a
-// directory that stands in for the Trash.
+// rename is os.Rename, tried again for a second on Windows, where a file that
+// another process holds open (kubectl reading the state file) cannot be
+// replaced until it lets go.
+func rename(from, to string) error {
+	err := os.Rename(from, to)
+	for i := 0; err != nil && runtime.GOOS == "windows" && i < 20; i++ {
+		time.Sleep(50 * time.Millisecond)
+		err = os.Rename(from, to)
+	}
+	return err
+}
+
+// Trash moves files to the Trash, never deletes them: the Recycle Bin on
+// Windows, macOS's /usr/bin/trash, else gio trash, else a refusal that names the
+// files. KCX_TRASH_DIR (tests) is a directory that stands in for the Trash.
 func Trash(getenv Getenv, paths ...string) error {
 	if len(paths) == 0 {
 		return nil
@@ -270,17 +287,21 @@ func Trash(getenv Getenv, paths ...string) error {
 		}
 		return nil
 	}
-	var cmd *exec.Cmd
-	switch {
-	case isExecutable("/usr/bin/trash"):
-		cmd = exec.Command("/usr/bin/trash", paths...)
-	case lookPath("gio"):
-		cmd = exec.Command("gio", append([]string{"trash", "--"}, paths...)...)
-	default:
-		return fmt.Errorf("no Trash on this machine; move it yourself: %s", strings.Join(paths, " "))
-	}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s: %w: %s", cmd.Path, err, strings.TrimSpace(string(out)))
+	if handled, err := platformTrash(paths); err != nil {
+		return err
+	} else if !handled {
+		var cmd *exec.Cmd
+		switch {
+		case isExecutable("/usr/bin/trash"):
+			cmd = exec.Command("/usr/bin/trash", paths...)
+		case lookPath("gio"):
+			cmd = exec.Command("gio", append([]string{"trash", "--"}, paths...)...)
+		default:
+			return fmt.Errorf("no Trash on this machine; move it yourself: %s", strings.Join(paths, " "))
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%s: %w: %s", cmd.Path, err, strings.TrimSpace(string(out)))
+		}
 	}
 	for _, p := range paths {
 		if _, err := os.Lstat(p); err == nil {

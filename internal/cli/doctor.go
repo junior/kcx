@@ -11,7 +11,6 @@ import (
 	"github.com/junior/kcx/v2/internal/kubeconfig"
 	"github.com/junior/kcx/v2/internal/layout"
 	"github.com/junior/kcx/v2/internal/profile"
-	"github.com/junior/kcx/v2/internal/secret"
 )
 
 // cmdDoctor checks the layout, the files, the settings, the profiles and the
@@ -173,7 +172,7 @@ func (a *App) cmdDoctor(args []string) error {
 				}
 			}
 			if p.Secret != "" {
-				if _, err := secret.Resolve(p.Secret, nil, nil); err != nil {
+				if _, err := a.secretProvider(p.Secret); err != nil {
 					problem("provider %s: %v", name, err)
 				} else {
 					ok("provider %s: secret provider %s found", name, p.Secret)

@@ -9,10 +9,15 @@
 //	status   prints cached, expired or empty (with detail after a space); exit 0
 //	         when cached, 1 otherwise
 //
+// Exit 3 from any verb says the provider cannot run on this machine at all (a
+// script that a locked-down PowerShell refuses, say): get and refresh report
+// ErrUnavailable, and a fetch then lets its command ask the person itself.
+//
 // kcx connects get's standard output to the fetch command's standard input and
 // never holds the secret in a string, an argument or an environment variable of
 // its own. Two providers are built in: prompt (no cache, asks at every fetch) and
-// env:VAR (the variable's value; for CI and tests).
+// env:VAR (the variable's value; for CI and tests). A name ending in .ps1 is a
+// PowerShell script (script.go).
 package secret
 
 import (
@@ -52,15 +57,30 @@ type Provider interface {
 // LookPath is the shape of exec.LookPath, passed in so tests can supply one.
 type LookPath func(string) (string, error)
 
-// Resolve finds the provider a profile names: "" or "none" is no provider;
-// "prompt" and "env:VAR" are built in; an absolute path is run as is; any other
-// name is looked up as kcx-secret-NAME on PATH, then as NAME itself.
+// ErrUnavailable is a provider's exit 3: it cannot run on this machine at all.
+var ErrUnavailable = errors.New("the provider cannot run here")
+
+// exitUnavailable is the exit status that says so.
+const exitUnavailable = 3
+
+// Resolve is ResolveWith for a provider that is no script.
 func Resolve(name string, lookPath LookPath, tty io.Reader) (Provider, error) {
+	return ResolveWith(name, Options{LookPath: lookPath, TTY: tty})
+}
+
+// ResolveWith finds the provider a profile names: "" or "none" is no provider;
+// "prompt" and "env:VAR" are built in; a name ending in .ps1 is a PowerShell
+// script (script.go); an absolute path is run as is; any other name is looked up
+// as kcx-secret-NAME on PATH, then as NAME itself.
+func ResolveWith(name string, o Options) (Provider, error) {
+	lookPath, tty := o.LookPath, o.TTY
 	switch {
 	case name == "" || name == "none":
 		return nil, nil
 	case name == "prompt":
 		return &Prompt{tty: tty}, nil
+	case isScript(name):
+		return resolveScript(name, o)
 	case strings.HasPrefix(name, "env:"):
 		v := strings.TrimPrefix(name, "env:")
 		if v == "" {
@@ -84,9 +104,11 @@ func Resolve(name string, lookPath LookPath, tty io.Reader) (Provider, error) {
 	return nil, fmt.Errorf("secret provider %s: neither kcx-secret-%s nor %s is on PATH", name, name, name)
 }
 
-// Exec is a provider that is a program with the four verbs.
+// Exec is a provider that is a program with the four verbs, or a PowerShell
+// script that shell runs.
 type Exec struct {
 	name, path string
+	shell      string // for a script: the PowerShell, by absolute path
 	// Stderr receives the provider's own messages (prompts included); os.Stderr
 	// when nil.
 	Stderr io.Writer
@@ -112,7 +134,7 @@ func (e *Exec) Get(ctx context.Context) (io.ReadCloser, func() error, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	cmd := exec.CommandContext(ctx, e.path, "get")
+	cmd := e.command(ctx, "get")
 	cmd.Stdout = w
 	cmd.Stderr = e.stderr()
 	if err := cmd.Start(); err != nil {
@@ -131,7 +153,7 @@ func (e *Exec) Get(ctx context.Context) (io.ReadCloser, func() error, error) {
 }
 
 func (e *Exec) Refresh(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) error {
-	cmd := exec.CommandContext(ctx, e.path, "refresh")
+	cmd := e.command(ctx, "refresh")
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("secret provider %s: refresh: %w", e.name, exitError(err))
@@ -140,16 +162,18 @@ func (e *Exec) Refresh(ctx context.Context, stdin io.Reader, stdout, stderr io.W
 }
 
 func (e *Exec) Forget(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, e.path, "forget")
+	cmd := e.command(ctx, "forget")
 	cmd.Stderr = e.stderr()
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("secret provider %s: forget: %w", e.name, exitError(err))
+		if err := exitError(err); !errors.Is(err, ErrUnavailable) { // one that cannot run here holds nothing
+			return fmt.Errorf("secret provider %s: forget: %w", e.name, err)
+		}
 	}
 	return nil
 }
 
 func (e *Exec) Status(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, e.path, "status")
+	cmd := e.command(ctx, "status")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = e.stderr()
@@ -157,11 +181,19 @@ func (e *Exec) Status(ctx context.Context) (string, error) {
 	status := strings.TrimSpace(out.String())
 	if err != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) && ee.ExitCode() == 1 {
-			if status == "" {
-				status = "empty"
+		if errors.As(err, &ee) {
+			switch ee.ExitCode() {
+			case 1:
+				if status == "" {
+					status = "empty"
+				}
+				return status, nil
+			case exitUnavailable:
+				if status == "" {
+					status = "cannot run here"
+				}
+				return status + " (a fetch lets its command ask for the secret itself)", nil
 			}
-			return status, nil
 		}
 		return status, fmt.Errorf("secret provider %s: status: %w", e.name, exitError(err))
 	}
@@ -174,6 +206,9 @@ func (e *Exec) Status(ctx context.Context) (string, error) {
 func exitError(err error) error {
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
+		if ee.ExitCode() == exitUnavailable {
+			return fmt.Errorf("exit %d: %w", exitUnavailable, ErrUnavailable)
+		}
 		return fmt.Errorf("exit %d", ee.ExitCode())
 	}
 	return err

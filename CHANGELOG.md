@@ -31,6 +31,19 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   know: a cluster reached over plain http or without TLS verification, and a
   user that logs in by running a program (named by its command alone). `kcx
   doctor` notes the same for every file it manages.
+- A secret provider can be a PowerShell script on Windows: a `secret` ending
+  in `.ps1` (an absolute path, `~\...`, or a file name in a PATH directory)
+  runs with Windows PowerShell by its absolute path, never one found on PATH,
+  as `-NoLogo -NoProfile -NonInteractive -File SCRIPT VERB`; `refresh` runs
+  without `-NonInteractive`, on the console. The `powershell` setting picks
+  PowerShell 7 (`pwsh`) or an absolute path instead. kcx passes no execution
+  policy: the machine's applies.
+- A secret provider that cannot run on a machine at all (a script that a
+  locked-down PowerShell refuses) exits 3, from any verb. kcx then lets the
+  fetch command ask for the secret itself: the terminal is its standard input,
+  nothing is piped and no timeout runs, and after a refusal it may ask once
+  more, never a third time. With no one at a terminal, nothing runs. `kcx
+  secret status` shows such a provider as one that cannot run here.
 
 ### Changed
 

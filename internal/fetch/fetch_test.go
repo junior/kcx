@@ -3,6 +3,7 @@ package fetch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,7 @@ EOF
 
 // fakeBroker is the four-verb secret provider over a cache file.
 const fakeBroker = `#!/bin/sh
+[ -n "${FAKE_UNAVAILABLE-}" ] && exit 3
 cache="$FAKE_CACHE"
 case "$1" in
   get) [ -s "$cache" ] || { echo "nothing cached" >&2; exit 1; }; printf '%s' "$(cat "$cache")" ;;
@@ -319,6 +321,60 @@ func TestSlowRefreshKeepsTheCommandsTime(t *testing.T) {
 	}
 	h.cacheIs(t, "good")
 	h.attemptsAre(t, 1)
+}
+
+// A provider that cannot run here (exit 3) lets the command ask the person
+// itself: the terminal is its standard input, no timeout, and a refusal lets
+// it ask once more, never a third time. With no one there, nothing runs.
+func TestUnavailableProviderLetsTheCommandAsk(t *testing.T) {
+	h := newHarness(t, "1s")
+	t.Setenv("FAKE_UNAVAILABLE", "1")
+	r := h.runner(true, "good\n")
+	r.Environ = append(r.Environ, "FAKE_UNAVAILABLE=1")
+	if err := r.Fetch(context.Background(), h.req("a")); err != nil {
+		t.Fatalf("the command asking itself: %v", err)
+	}
+	h.attemptsAre(t, 1)
+	if !strings.Contains(h.errb.String(), "secret provider fake cannot run here: fake-cli asks for the secret itself") {
+		t.Fatalf("no word that the command asks: %q", h.errb.String())
+	}
+	if log, _ := os.ReadFile(h.log); string(log) != "good\n" {
+		t.Fatalf("the command read %q", log)
+	}
+
+	// Refused twice: the second ask is the last. The answers come from a file,
+	// as from a terminal, one line to each run of the command.
+	_ = os.Remove(h.attempts)
+	answers := filepath.Join(t.TempDir(), "answers")
+	if err := os.WriteFile(answers, []byte("bad\nbad\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(answers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	r = h.runner(true, "")
+	r.Stdin = f
+	r.Environ = append(r.Environ, "FAKE_UNAVAILABLE=1")
+	err = r.Fetch(context.Background(), h.req("a"))
+	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "twice") {
+		t.Fatalf("refused twice: %v", err)
+	}
+	h.attemptsAre(t, 2)
+	if !strings.Contains(h.errb.String(), "fake-cli asks once more") {
+		t.Fatalf("no word of the second ask: %q", h.errb.String())
+	}
+
+	// No one there: nothing runs.
+	_ = os.Remove(h.attempts)
+	r = h.runner(false, "")
+	r.Environ = append(r.Environ, "FAKE_UNAVAILABLE=1")
+	err = r.Fetch(context.Background(), h.req("a"))
+	if err == nil || !strings.Contains(err.Error(), "cannot run here, and there is no terminal") {
+		t.Fatalf("non-interactive: %v", err)
+	}
+	h.attemptsAre(t, 0)
 }
 
 func TestNoSecretProvider(t *testing.T) {

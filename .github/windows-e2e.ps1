@@ -79,6 +79,62 @@ current-context: demo
     kcx rm demo2
     Check ($LASTEXITCODE -eq 0) 'kcx rm demo2 (the Recycle Bin)'
     Check (-not (Test-Path -LiteralPath ([IO.Path]::Combine($kube, 'configs', 'demo2.yaml')))) 'demo2.yaml left ~/.kube'
+
+    # A fetch whose secret provider is a PowerShell script, which kcx runs with
+    # Windows PowerShell by its absolute path; the platform's command (here a
+    # script too, started by its full command line) reads the password on stdin.
+    $bin = Join-Path $work 'bin'
+    New-Item -ItemType Directory -Force -Path $bin | Out-Null
+    $secretScript = Join-Path $bin 'fake_secret.ps1'
+    Set-Content -Encoding ascii -Path $secretScript -Value @'
+param([string]$verb)
+if ($env:FAKE_UNAVAILABLE) { [Console]::Error.WriteLine('fake_secret: this PowerShell will not run me'); exit 3 }
+switch ($verb) {
+  'get' { $b = [Text.Encoding]::UTF8.GetBytes('hunter2'); $o = [Console]::OpenStandardOutput(); $o.Write($b, 0, $b.Length); $o.Flush(); exit 0 }
+  'status' { 'cached'; exit 0 }
+  default { exit 0 }
+}
+'@
+    $platform = Join-Path $bin 'fake_platform.ps1'
+    Set-Content -Encoding ascii -Path $platform -Value @'
+param([string]$out)
+$pw = [Console]::In.ReadLine()
+if ($pw -cne 'hunter2') { [Console]::Error.WriteLine('401 Unauthorized'); exit 1 }
+Copy-Item -LiteralPath $env:FAKE_KUBECONFIG -Destination $out
+exit 0
+'@
+    $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $profiles = [IO.Path]::Combine($home2, '.config', 'kcx', 'profiles')
+    New-Item -ItemType Directory -Force -Path $profiles | Out-Null
+    Set-Content -Encoding ascii -Path (Join-Path $profiles 'lab.toml') -Value @"
+[provider.lab]
+command  = ['$winPS', '-NoProfile', '-NonInteractive', '-File', '$platform', '{out}']
+secret   = '$secretScript'
+host     = '{name}.example'
+user     = 'jane'
+rejected = '401'
+
+[group.lab]
+provider = 'lab'
+
+[cluster.lab1]
+group = 'lab'
+"@
+    $env:FAKE_KUBECONFIG = $kc
+    kcx fetch lab1
+    Check ($LASTEXITCODE -eq 0) 'kcx fetch lab1 through a .ps1 secret provider and Windows PowerShell'
+    Check (Test-Path -LiteralPath ([IO.Path]::Combine($kube, 'configs', 'lab1.yaml'))) 'lab1.yaml imported'
+    $status = (kcx secret status) | Out-String
+    Check ($LASTEXITCODE -eq 0 -and $status -match 'cached') "kcx secret status: $status"
+
+    # The provider cannot run here (exit 3), and no one is at a terminal: kcx
+    # says so and runs nothing.
+    $env:FAKE_UNAVAILABLE = '1'
+    $out = (kcx fetch lab1 2>&1) | Out-String
+    Check ($LASTEXITCODE -ne 0 -and $out -match 'cannot run here, and there is no terminal') "a provider that cannot run here: $out"
+    $status = (kcx secret status) | Out-String
+    Check ($status -match 'ask for the secret itself') "kcx secret status of a provider that cannot run here: $status"
+    Remove-Item Env:FAKE_UNAVAILABLE
   }
 } finally {
   Remove-Item -Recurse -Force -LiteralPath $work -ErrorAction Ignore

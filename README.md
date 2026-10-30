@@ -135,6 +135,20 @@ and is never an argument, an environment variable or a string kcx keeps. Two
 providers are built in: `prompt` (asks at every fetch, caches nothing) and
 `env:VAR`.
 
+On Windows a provider can be a PowerShell script: a `secret` ending in `.ps1`,
+named by an absolute path, by `~\...`, or by a file name in a `PATH`
+directory. kcx runs it with Windows PowerShell by its absolute path, never one
+found on `PATH` (`powershell = "pwsh"` in the settings for PowerShell 7), as
+`-NoLogo -NoProfile -NonInteractive -File SCRIPT VERB`; `refresh` runs without
+`-NonInteractive`, on the console. kcx passes no execution policy: the
+machine's applies.
+
+A provider that cannot run on a machine at all, a script that a locked-down
+PowerShell refuses for one, says so by exiting 3. kcx then lets the fetch
+command ask for the secret itself: the command gets the terminal as its
+standard input, nothing piped and no timeout, and after a refusal it may ask
+once more. With no one at a terminal, nothing runs.
+
 The lockout policy is an invariant: a refused secret is forgotten; if you are
 there, kcx asks once and retries once; a second refusal, or no one to ask,
 stops it; the first refusal during `kcx fetch --all` aborts the rest. Two bad
@@ -183,11 +197,12 @@ runs its tests and a PowerShell end to end there. Its home is kubectl's:
 `%USERPROFILE%\.kube`, and `KUBECONFIG` is separated by `;`. `kcx rm` moves a
 file to the Recycle Bin. `kcx shell` and the read-only shell start `SHELL`
 when it is set, else PowerShell 7, else Windows PowerShell, else `cmd.exe`.
-Prompts for a secret or a name read the console. A secret provider or a fetch
-command is a program on `PATH` as elsewhere; a PowerShell script needs a
-`.cmd` wrapper, or `pwsh -File` as the profile's command. Windows has no file
-modes for kcx to set: your profile directory's permissions keep `~/.kube`
-private, and `kcx doctor` does not check modes there.
+Prompts for a secret or a name read the console. A fetch command is a program,
+as elsewhere (a PowerShell script runs as `powershell.exe -File SCRIPT`, by
+full command line); a secret provider may be a PowerShell script itself (see
+Secret providers). Windows has no file modes for kcx to set: your profile
+directory's permissions keep `~/.kube` private, and `kcx doctor` does not
+check modes there.
 
 ## Settings
 
@@ -200,6 +215,7 @@ secret_cache = true    # false: forget a cached secret after every fetch (shared
 probe        = true    # false: no authenticated check before switching to a profile cluster
 picker       = "fzf"   # or "plain"
 trash        = "auto"  # or "none"
+powershell   = "windows" # or "pwsh", or an absolute path: what runs a .ps1 secret provider
 ```
 
 ## Building and testing

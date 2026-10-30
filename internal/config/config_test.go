@@ -37,6 +37,8 @@ func TestLoadRefusesMistakes(t *testing.T) {
 		"trash":  "[settings]\ntrash = \"delete\"\n",
 		"syntax": "[settings\n",
 		"table":  "[setting]\nlab_node = true\n",
+		"ps":     "[settings]\npowershell = \"powershell7\"\n",
+		"psrel":  "[settings]\npowershell = \"bin/pwsh\"\n",
 	}
 	for name, content := range cases {
 		p := filepath.Join(dir, name+".toml")
@@ -46,5 +48,23 @@ func TestLoadRefusesMistakes(t *testing.T) {
 		if _, err := Load(p); err == nil || !strings.Contains(err.Error(), p) {
 			t.Errorf("%s: expected an error naming the file, got %v", name, err)
 		}
+	}
+}
+
+func TestPowerShellSetting(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "pwsh.exe")
+	for _, v := range []string{"windows", "pwsh", abs} {
+		p := filepath.Join(dir, "s.toml")
+		if err := os.WriteFile(p, []byte("[settings]\npowershell = '"+v+"'\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := Load(p)
+		if err != nil || s.PowerShell != v {
+			t.Errorf("powershell = %q: %+v %v", v, s, err)
+		}
+	}
+	if Default().PowerShell != "" {
+		t.Fatal("the default is Windows PowerShell, by no setting")
 	}
 }

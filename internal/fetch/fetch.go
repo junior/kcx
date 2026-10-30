@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +51,9 @@ type Runner struct {
 	LookPath    secret.LookPath
 	// TTY, when set, is where the prompt provider reads (tests); /dev/tty otherwise.
 	TTY io.Reader
+	// Home is what ~ stands for in a script provider's path; PowerShell is the
+	// powershell setting, the PowerShell that runs such a script.
+	Home, PowerShell string
 	// Environ is the environment the command runs with (os.Environ() when nil);
 	// KUBECONFIG and KCX_OUT are always replaced.
 	Environ []string
@@ -81,7 +85,9 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 	if err != nil {
 		return err
 	}
-	prov, err := secret.Resolve(p.Secret, r.LookPath, r.TTY)
+	prov, err := secret.ResolveWith(p.Secret, secret.Options{
+		LookPath: r.LookPath, TTY: r.TTY, Getenv: r.Getenv, Home: r.Home, PowerShell: r.PowerShell,
+	})
 	if err != nil {
 		return err
 	}
@@ -96,10 +102,10 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 	r.sayf("fetching %s (%s, user %s)", c.Name, host, user)
 	retried := false
 	for {
-		outcome, err := r.runOnce(ctx, p, args, prov, req.Out)
+		outcome, asked, err := r.runOnce(ctx, p, args, prov, req.Out)
 		switch outcome {
 		case OK:
-			if prov != nil && prov.Caches() && !r.SecretCache {
+			if prov != nil && prov.Caches() && !r.SecretCache && !asked {
 				_ = prov.Forget(ctx)
 			}
 			return nil
@@ -108,6 +114,16 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 		case Rejected:
 			if prov == nil {
 				return fmt.Errorf("cluster %s: %w: %v", c.Name, ErrRejected, err)
+			}
+			if asked {
+				// The command asked the person itself: it may ask once more, and
+				// never a third time.
+				if retried {
+					return fmt.Errorf("cluster %s: %w twice; no further try was made", c.Name, ErrRejected)
+				}
+				r.errf("the secret was refused; %s asks once more", filepath.Base(args[0]))
+				retried = true
+				continue
 			}
 			_ = prov.Forget(ctx)
 			if retried || !r.Interactive || !prov.Caches() {
@@ -124,14 +140,16 @@ func (r *Runner) Fetch(ctx context.Context, req Request) error {
 }
 
 // runOnce runs the provider command once, with the secret on standard input
-// when there is a provider, and classifies the result.
-func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string, prov secret.Provider, out string) (Outcome, error) {
+// when there is a provider, and classifies the result. asked says the provider
+// could not run here and the command asked the person for the secret itself.
+func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string, prov secret.Provider, out string) (outcome Outcome, asked bool, err error) {
 	timeout := p.TimeoutDuration()
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
 
 	var stdin io.Reader = strings.NewReader("")
+	cctx, cancel := context.WithCancel(ctx)
 	if prov != nil {
 		// The secret is produced before the command starts: a provider that has
 		// nothing stops the fetch here, so a missing secret is never sent as a bad
@@ -139,23 +157,31 @@ func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string
 		// Reading it is bounded by the timeout; asking for it is not, since a
 		// person may take minutes to look a password up, and the command's own
 		// timeout starts once the secret is there.
-		secretReader, err := readSecret(ctx, prov, timeout)
-		if err != nil {
-			if !r.Interactive || !prov.Caches() {
-				return Failed, fmt.Errorf("no secret for provider %s (%v); run kcx secret refresh %s from a terminal", prov.Name(), err, prov.Name())
+		secretReader, err := r.secretFor(ctx, prov, timeout)
+		switch {
+		case errors.Is(err, secret.ErrUnavailable):
+			// The provider cannot run on this machine (a script that a locked-down
+			// PowerShell refuses): the command asks the person itself, on the
+			// terminal, and with no timeout, since a person is typing.
+			if !r.Interactive {
+				cancel()
+				return Failed, false, fmt.Errorf("secret provider %s cannot run here, and there is no terminal for %s to ask on", prov.Name(), filepath.Base(args[0]))
 			}
-			if err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
-				return Failed, err
-			}
-			if secretReader, err = readSecret(ctx, prov, timeout); err != nil {
-				return Failed, err
-			}
+			r.sayf("secret provider %s cannot run here: %s asks for the secret itself", prov.Name(), filepath.Base(args[0]))
+			stdin, asked = r.Stdin, true
+		case err != nil:
+			cancel()
+			return Failed, false, err
+		default:
+			defer secretReader.Close()
+			// Newline-terminated, as a program reading a line from a pipe expects.
+			stdin = io.MultiReader(secretReader, strings.NewReader("\n"))
 		}
-		defer secretReader.Close()
-		// Newline-terminated, as a program reading a line from a pipe expects.
-		stdin = io.MultiReader(secretReader, strings.NewReader("\n"))
 	}
-	cctx, cancel := context.WithTimeout(ctx, timeout)
+	if !asked {
+		cancel()
+		cctx, cancel = context.WithTimeout(ctx, timeout)
+	}
 	defer cancel()
 	_ = os.Remove(out)
 	cmd := exec.CommandContext(cctx, args[0], args[1:]...)
@@ -168,26 +194,41 @@ func (r *Runner) runOnce(ctx context.Context, p *profile.Provider, args []string
 	cmd.Stdout = io.MultiWriter(r.Stdout, &captured)
 	cmd.Stderr = io.MultiWriter(r.Stderr, &captured)
 	cmd.Env = withEnv(r.environ(), map[string]string{"KUBECONFIG": out, "KCX_OUT": out})
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		if cctx.Err() == context.DeadlineExceeded {
-			return Failed, fmt.Errorf("%s timed out after %s", args[0], timeout)
+			return Failed, asked, fmt.Errorf("%s timed out after %s", args[0], timeout)
 		}
 		if re := p.RejectedRE(); re != nil && re.Match(captured.Bytes()) {
-			return Rejected, fmt.Errorf("%s: %s", args[0], firstLine(captured.Bytes()))
+			return Rejected, asked, fmt.Errorf("%s: %s", args[0], firstLine(captured.Bytes()))
 		}
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return Failed, fmt.Errorf("%s failed (exit %d); nothing was imported", args[0], ee.ExitCode())
+			return Failed, asked, fmt.Errorf("%s failed (exit %d); nothing was imported", args[0], ee.ExitCode())
 		}
-		return Failed, fmt.Errorf("cannot run %s: %w", args[0], err)
+		return Failed, asked, fmt.Errorf("cannot run %s: %w", args[0], err)
 	}
-	info, err := os.Stat(out)
-	if err != nil || info.Size() == 0 {
-		return Failed, fmt.Errorf("%s wrote no kubeconfig: a tool that ignores KUBECONFIG needs {out} where its file option goes", args[0])
+	if info, err := os.Stat(out); err != nil || info.Size() == 0 {
+		return Failed, asked, fmt.Errorf("%s wrote no kubeconfig: a tool that ignores KUBECONFIG needs {out} where its file option goes", args[0])
 	}
 	_ = os.Chmod(out, 0o600)
-	return OK, nil
+	return OK, asked, nil
+}
+
+// secretFor reads the provider's secret, asking for it once (refresh) when the
+// provider has none and someone is there to answer. ErrUnavailable passes
+// through: the provider cannot run on this machine at all.
+func (r *Runner) secretFor(ctx context.Context, prov secret.Provider, timeout time.Duration) (io.ReadCloser, error) {
+	rd, err := readSecret(ctx, prov, timeout)
+	if err == nil || errors.Is(err, secret.ErrUnavailable) {
+		return rd, err
+	}
+	if !r.Interactive || !prov.Caches() {
+		return nil, fmt.Errorf("no secret for provider %s (%v); run kcx secret refresh %s from a terminal", prov.Name(), err, prov.Name())
+	}
+	if err := prov.Refresh(ctx, r.Stdin, r.Stderr, r.Stderr); err != nil {
+		return nil, err
+	}
+	return readSecret(ctx, prov, timeout)
 }
 
 // readSecret runs the provider's get within timeout and hands back the secret,

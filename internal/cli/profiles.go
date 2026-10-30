@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,12 +84,22 @@ func (a *App) interactive() bool {
 	return false
 }
 
-func (a *App) runner(secretCache bool) *fetch.Runner {
+func (a *App) runner(s config.Settings) *fetch.Runner {
 	return &fetch.Runner{
 		Stdin: a.stdin, Stdout: a.stdout, Stderr: a.stderr,
-		Interactive: a.interactive(), SecretCache: secretCache,
-		Getenv: a.getenv,
+		Interactive: a.interactive(), SecretCache: s.SecretCache,
+		Getenv: a.getenv, Home: a.lay.Home, PowerShell: s.PowerShell,
 	}
+}
+
+// secretProvider resolves a secret provider by name as a fetch would: a
+// PowerShell script by the powershell setting, ~ as kcx's home.
+func (a *App) secretProvider(name string) (secret.Provider, error) {
+	s, err := a.settings()
+	if err != nil {
+		return nil, err
+	}
+	return secret.ResolveWith(name, secret.Options{Getenv: a.getenv, Home: a.lay.Home, PowerShell: s.PowerShell})
 }
 
 // fetchCluster obtains c's kubeconfig through its provider and imports it as
@@ -107,7 +118,7 @@ func (a *App) fetchCluster(set *profile.Set, c *profile.Cluster, user string) (s
 	}
 	defer os.RemoveAll(work)
 	out := filepath.Join(work, "kubeconfig")
-	if err := a.runner(s.SecretCache).Fetch(context.Background(), fetch.Request{Set: set, Cluster: c, User: user, Out: out}); err != nil {
+	if err := a.runner(s).Fetch(context.Background(), fetch.Request{Set: set, Cluster: c, User: user, Out: out}); err != nil {
 		return "", err
 	}
 	return a.importFetched(set, c, out)
@@ -367,7 +378,7 @@ func (a *App) cmdFetch(args []string) error {
 	defer os.RemoveAll(work)
 	outFor := func(c *profile.Cluster) string { return filepath.Join(work, c.Name+".kubeconfig") }
 	var lastCtx string
-	done, failed, aborted := a.runner(s.SecretCache).Many(context.Background(), set, clusters, user, outFor, func(c *profile.Cluster) error {
+	done, failed, aborted := a.runner(s).Many(context.Background(), set, clusters, user, outFor, func(c *profile.Cluster) error {
 		ctx, err := a.importFetched(set, c, outFor(c))
 		if err != nil {
 			return err
@@ -499,7 +510,7 @@ func (a *App) cmdSecret(args []string) error {
 			name = n
 		}
 	}
-	prov, err := secret.Resolve(name, nil, nil)
+	prov, err := a.secretProvider(name)
 	if err != nil {
 		return err
 	}
@@ -519,6 +530,9 @@ func (a *App) cmdSecret(args []string) error {
 		fmt.Fprintf(a.stdout, "%s: %s\n", prov.Name(), s)
 	case "refresh":
 		if err := prov.Refresh(ctx, a.stdin, a.stdout, a.stderr); err != nil {
+			if errors.Is(err, secret.ErrUnavailable) {
+				return fmt.Errorf("%v: it cannot run on this machine, so a fetch lets its command ask for the secret itself", err)
+			}
 			return err
 		}
 	case "forget":

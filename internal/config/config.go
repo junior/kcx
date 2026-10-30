@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -26,6 +27,10 @@ type Settings struct {
 	// Trash is "auto" (the system Trash, refusing when there is none) or "none"
 	// (a refusal that names the file, never a deletion).
 	Trash string `toml:"trash"`
+	// PowerShell runs a secret provider that is a .ps1 script: "windows" (the
+	// default: Windows PowerShell, by its absolute path), "pwsh" (PowerShell 7)
+	// or an absolute path to a PowerShell.
+	PowerShell string `toml:"powershell"`
 }
 
 // Default is the configuration of a machine without a settings file.
@@ -70,6 +75,11 @@ func Load(path string) (Settings, error) {
 	case "auto", "none":
 	default:
 		return s, fmt.Errorf("%s: trash must be auto or none, not %q", path, s.Trash)
+	}
+	switch {
+	case s.PowerShell == "" || s.PowerShell == "windows" || s.PowerShell == "pwsh" || filepath.IsAbs(s.PowerShell):
+	default:
+		return s, fmt.Errorf("%s: powershell must be windows, pwsh or an absolute path, not %q", path, s.PowerShell)
 	}
 	return s, nil
 }

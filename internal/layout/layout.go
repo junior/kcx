@@ -268,8 +268,9 @@ func rename(from, to string) error {
 }
 
 // Trash moves files to the Trash, never deletes them: the Recycle Bin on
-// Windows, macOS's /usr/bin/trash, else gio trash, else a refusal that names the
-// files. KCX_TRASH_DIR (tests) is a directory that stands in for the Trash.
+// Windows (refusing where a file's drive has none), macOS's /usr/bin/trash,
+// else gio trash, else a refusal that names the files. KCX_TRASH_DIR (tests) is
+// a directory that stands in for the Trash.
 func Trash(getenv Getenv, paths ...string) error {
 	if len(paths) == 0 {
 		return nil

@@ -211,15 +211,18 @@ kcx runs on Windows, amd64 and arm64, as it does on macOS and Linux, and CI
 runs its tests and a PowerShell end to end there. Its home is kubectl's:
 `%USERPROFILE%` unless `HOME` is set (client-go's rule), so `~/.kube` above is
 `%USERPROFILE%\.kube`, and `KUBECONFIG` is separated by `;`. `kcx rm` moves a
-file to the Recycle Bin. `kcx shell` and the read-only shell start `SHELL`
-when it is set, else PowerShell 7, else Windows PowerShell, else `cmd.exe`.
-Prompts for a secret or a name read the console, and so does the numbered menu
-that stands in for fzf when `fzf.exe` is not on `PATH`. A fetch command is a
-program, as elsewhere (a PowerShell script runs as `powershell.exe -File
-SCRIPT`, by full command line); a secret provider may be a PowerShell script
-itself (see Secret providers). Windows has no file modes for kcx to set: your
-profile directory's permissions keep `~/.kube` private, and `kcx doctor` does
-not check modes there.
+file to the Recycle Bin, and so does `kcx add -f` with the file it replaces;
+where the file's drive has no Recycle Bin (a network drive, a removable or
+`subst` drive, or the bin turned off), Windows would delete it for good, so
+kcx refuses and names the file. `kcx shell` and the read-only shell start
+`SHELL` when it is set, else PowerShell 7, else Windows PowerShell, else
+`cmd.exe`. Prompts for a secret or a name read the console, and so does the
+numbered menu that stands in for fzf when `fzf.exe` is not on `PATH`. A fetch
+command is a program, as elsewhere (a PowerShell script runs as
+`powershell.exe -File SCRIPT`, by full command line); a secret provider may be
+a PowerShell script itself (see Secret providers). Windows has no file modes
+for kcx to set: your profile directory's permissions keep `~/.kube` private,
+and `kcx doctor` does not check modes there.
 
 ## Settings
 

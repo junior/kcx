@@ -34,6 +34,13 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
 ### Fixed
 
+- Windows: `kcx rm`, and `kcx add -f` with the file it replaces, no longer
+  delete a file for good where its drive has no Recycle Bin. The shell's
+  delete, asked to use the Recycle Bin, deletes outright on a network drive
+  (a home folder on a share), a removable or `subst` drive, or where the bin
+  is turned off for the drive or by policy, and says nothing. kcx now checks
+  each file's drive first and refuses, naming the file, before anything
+  moves.
 - Windows: Ctrl-C in fzf cancels the pick, as ESC does. The console sends
   Ctrl-C to every program on it, kcx included, which ended there with
   Windows' Ctrl-C status before fzf's own exit could say the pick was

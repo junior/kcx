@@ -234,7 +234,7 @@ lab_node     = false   # true: refuse permanent credentials on this machine
 secret_cache = true    # false: forget a cached secret after every fetch (shared hosts)
 probe        = true    # false: no authenticated check before switching to a profile cluster
 picker       = "fzf"   # or "plain": the numbered menu, fzf or not
-trash        = "auto"  # or "none"
+trash        = "auto"  # or "none": kcx rm and kcx add -f refuse, naming the file
 powershell   = "windows" # or "pwsh", or an absolute path: what runs a .ps1 secret provider
 ```
 

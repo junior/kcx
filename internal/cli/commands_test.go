@@ -409,3 +409,40 @@ func TestCompleteWords(t *testing.T) {
 	}
 	_ = l
 }
+
+// trash = "none": kcx rm and kcx add -f refuse, naming the file, and nothing
+// moves or changes.
+func TestTrashNone(t *testing.T) {
+	e, l := fixture(t)
+	if err := os.MkdirAll(filepath.Dir(l.Config), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.Config, []byte("[settings]\ntrash = \"none\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	alpha, beta := checksum(t, l.PermFile("alpha")), checksum(t, l.PermFile("beta"))
+	code, _, errs := runKcx(t, e, "rm", "alpha")
+	if code != 1 || !strings.Contains(errs, `trash = "none" in `+l.Config+": kcx rm moves nothing to the Trash; delete "+l.PermFile("alpha")+" yourself") {
+		t.Fatalf("rm: %d %q", code, errs)
+	}
+	src := filepath.Join(t.TempDir(), "new.yaml")
+	writeKubeconfig(t, src, "beta", "beta", "beta", "https://beta2.example.test:6443", "")
+	code, _, errs = runKcx(t, e, "add", "beta", src, "-f")
+	if code != 1 || !strings.Contains(errs, "the old "+l.PermFile("beta")+" would go to the Trash; move it away yourself, then add it again") {
+		t.Fatalf("add -f: %d %q", code, errs)
+	}
+	if checksum(t, l.PermFile("alpha")) != alpha || checksum(t, l.PermFile("beta")) != beta {
+		t.Fatal("a refusal changed a cluster file")
+	}
+	if entries, _ := os.ReadDir(e["KCX_TRASH_DIR"]); len(entries) != 0 {
+		t.Fatalf("%d file(s) went to the Trash", len(entries))
+	}
+	// A new name is no replacement: add works.
+	if code, _, errs := runKcx(t, e, "add", "gamma", src); code != 0 {
+		t.Fatalf("add a new name: %d %q", code, errs)
+	}
+	// doctor says the setting.
+	if _, out, _ := runKcx(t, e, "doctor"); !strings.Contains(out, "trash=none") {
+		t.Fatalf("doctor: %q", out)
+	}
+}

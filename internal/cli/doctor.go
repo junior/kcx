@@ -151,7 +151,7 @@ func (a *App) cmdDoctor(args []string) error {
 	if s, err := a.settings(); err != nil {
 		problem("%v", err)
 	} else {
-		ok("settings: lab_node=%v secret_cache=%v probe=%v picker=%s", s.LabNode, s.SecretCache, s.Probe, s.Picker)
+		ok("settings: lab_node=%v secret_cache=%v probe=%v picker=%s trash=%s", s.LabNode, s.SecretCache, s.Probe, s.Picker, s.Trash)
 	}
 	files, err := profile.Files(a.profileSources())
 	if err != nil {

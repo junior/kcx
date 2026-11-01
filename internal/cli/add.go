@@ -123,8 +123,13 @@ func (a *App) cmdAdd(where string, args []string) error {
 			}
 		}
 	}
-	if _, err := os.Stat(dest); err == nil && !p.force {
-		return fmt.Errorf("%s exists already (%s); -f replaces it and moves the old file to the Trash", p.name, dest)
+	if _, err := os.Stat(dest); err == nil {
+		if !p.force {
+			return fmt.Errorf("%s exists already (%s); -f replaces it and moves the old file to the Trash", p.name, dest)
+		}
+		if err := a.noTrash("the old " + dest + " would go to the Trash; move it away yourself, then add it again"); err != nil {
+			return err
+		}
 	}
 	work, err := os.MkdirTemp("", "kcx.")
 	if err != nil {
@@ -271,6 +276,9 @@ func (a *App) cmdRm(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := a.noTrash("kcx rm moves nothing to the Trash; delete " + f + " yourself"); err != nil {
+		return err
+	}
 	ctxs := managedContexts(f)
 	if err := layout.Trash(a.getenv, f); err != nil {
 		return fmt.Errorf("could not move %s to the Trash: %w", f, err)
@@ -281,6 +289,20 @@ func (a *App) cmdRm(args []string) error {
 			return err
 		}
 		a.say("there is no current context now; kcx NAME picks one")
+	}
+	return nil
+}
+
+// noTrash refuses when the settings say trash = "none": kcx then neither moves
+// a file to the Trash nor deletes one. what names the file and what to do
+// instead.
+func (a *App) noTrash(what string) error {
+	s, err := a.settings()
+	if err != nil {
+		return err
+	}
+	if s.Trash == "none" {
+		return fmt.Errorf("trash = \"none\" in %s: %s", a.lay.Config, what)
 	}
 	return nil
 }

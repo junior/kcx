@@ -424,8 +424,8 @@ func TestForgetAfterRefusalSaysRejected(t *testing.T) {
 }
 
 // One refresh per provider in a run: after a refresh that failed, the rest of
-// fetch --all fails at once instead of asking for every cluster (kob_secret
-// itself refuses a second reveal soon after a failed one).
+// fetch --all fails at once instead of asking for every cluster (a provider
+// may itself refuse a second attempt soon after a failed one).
 func TestOneRefreshPerRun(t *testing.T) {
 	h := newHarness(t, "")
 	refreshes := filepath.Join(t.TempDir(), "refreshes")

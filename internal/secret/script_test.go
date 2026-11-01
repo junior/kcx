@@ -29,7 +29,7 @@ func TestScriptResolve(t *testing.T) {
 	progs := filepath.Join(root, "Program Files")
 	pwsh7 := touch(filepath.Join(progs, "PowerShell", "7", "pwsh.exe"))
 	home := filepath.Join(root, "home")
-	script := touch(filepath.Join(home, ".kob-tools", "kob_secret.ps1"))
+	script := touch(filepath.Join(home, ".acme-tools", "acme_secret.ps1"))
 	pathDir := filepath.Join(root, "bin")
 	onPath := touch(filepath.Join(pathDir, "other.ps1"))
 	env := map[string]string{"SystemRoot": sysroot, "ProgramFiles": progs, "PATH": pathDir}
@@ -64,8 +64,8 @@ func TestScriptResolve(t *testing.T) {
 	for _, c := range []struct {
 		name, ps, wantScript, wantShell string
 	}{
-		{"~/.kob-tools/kob_secret.ps1", "windows", script, winPS},
-		{`~\.kob-tools\kob_secret.ps1`, "", script, winPS}, // Windows' separator: on Windows only
+		{"~/.acme-tools/acme_secret.ps1", "windows", script, winPS},
+		{`~\.acme-tools\acme_secret.ps1`, "", script, winPS}, // Windows' separator: on Windows only
 		{"other.ps1", "pwsh", onPath, pwsh7},
 		{script, pwsh7, script, pwsh7},
 	} {
@@ -86,7 +86,7 @@ func TestScriptResolve(t *testing.T) {
 	for _, c := range []struct {
 		name, goos, ps, want string
 	}{
-		{`tools\kob_secret.ps1`, "windows", "", "absolute path"},
+		{`tools\acme_secret.ps1`, "windows", "", "absolute path"},
 		{"missing.ps1", "windows", "", "not in any PATH directory"},
 		{filepath.Join(home, "nope.ps1"), "windows", "", "nope.ps1"},
 		{script, "windows", "powershell7", `"pwsh" or an absolute path`},
@@ -99,7 +99,7 @@ func TestScriptResolve(t *testing.T) {
 	}
 }
 
-// fakeScript is a four-verb provider in PowerShell, as kob_secret.ps1 is: get
+// fakeScript is a four-verb provider in PowerShell, as a real one would be: get
 // writes the cached bytes with no newline; refresh reads a line from standard
 // input; exit 3 from every verb when FAKE_PS_UNAVAILABLE is set.
 const fakeScript = `param([string]$verb)

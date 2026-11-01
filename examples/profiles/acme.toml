@@ -4,7 +4,10 @@
 #
 # Templates may use {name} (the cluster's short name), {host}, {user}, {out} (the
 # file the command must write) and {env.VAR}. A list of templates means: the
-# first that renders to something non-empty.
+# first that renders to something non-empty. In `host` and `user`, an entry that
+# names an unset or empty variable is skipped, so "svc-{env.USER}" without USER
+# is never the user "svc-"; with no entry left, the fetch stops and names the
+# variables.
 
 # A platform with its own command that takes a password on standard input. The
 # secret comes from a provider program with four verbs: get (to a pipe), refresh,

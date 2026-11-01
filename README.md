@@ -110,11 +110,15 @@ site  = "Austin"
 ```
 
 `kcx prod1` then fetches `prod1` through the command, imports the result as
-`~/.kube/configs/prod1.yaml` with its entries named `prod1`, and switches to it. A
-provider's `context_name = "{user}@{name}"` keeps the `user@cluster` shape
-some platforms use; `kcx add --keep-names` imports a cloud CLI's kubeconfig
-with the names the cloud gave it. The file is always `NAME.yaml`, and `kcx
-NAME` resolves by file first.
+`~/.kube/configs/prod1.yaml` with its entries named `prod1`, and switches to it.
+`host` and `user` may be lists: the first entry that renders to something wins,
+and an entry that names an unset or empty variable is skipped, so
+`"svc-{env.USER}"` without `USER` is never the user `svc-`; with no entry left,
+the fetch stops before anything runs and names the variables (`-u` still names
+the user). A provider's `context_name = "{user}@{name}"` keeps the
+`user@cluster` shape some platforms use; `kcx add --keep-names` imports a cloud
+CLI's kubeconfig with the names the cloud gave it. The file is always
+`NAME.yaml`, and `kcx NAME` resolves by file first.
 
 `kcx` alone opens the picker over your contexts, and its top line browses the
 profiles the way they are organised: group, then site, then cluster, in the

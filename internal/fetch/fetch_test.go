@@ -178,6 +178,31 @@ func (h *harness) req(name string) Request {
 	return Request{Set: h.set, Cluster: c, Out: filepath.Join(h.dir, name+".out")}
 }
 
+// A user template that names an unset variable is no user: "svc-{env.USER}"
+// without USER stops the fetch before the secret provider or the command runs,
+// rather than logging in as "svc-".
+func TestUnsetUserVariableStopsTheFetch(t *testing.T) {
+	h := newHarness(t, "")
+	_ = os.WriteFile(h.cache, []byte("good"), 0o600)
+	r := h.runner(false, "")
+	r.Getenv = func(string) string { return "" }
+	err := r.Fetch(context.Background(), h.req("a"))
+	if err == nil || !strings.Contains(err.Error(), "cluster a: user: USER is not set; or name the user with -u") {
+		t.Fatalf("fetch without USER: %v", err)
+	}
+	h.attemptsAre(t, 0)
+	if data, _ := os.ReadFile(h.log); len(data) != 0 {
+		t.Fatalf("the secret provider ran: %q", data)
+	}
+	// -u still names the user.
+	req := h.req("a")
+	req.User = "svc-jane"
+	if err := r.Fetch(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	h.attemptsAre(t, 1)
+}
+
 func TestCachedGood(t *testing.T) {
 	h := newHarness(t, "")
 	_ = os.WriteFile(h.cache, []byte("good"), 0o600)

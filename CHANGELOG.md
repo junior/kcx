@@ -20,6 +20,18 @@ author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
   a name asked for one, and `kcx ns` printed the namespaces. `kcx doctor` now
   says the pickers are menus where fzf is missing.
 
+### Changed
+
+- A `host` or `user` template that names an unset or empty environment
+  variable no longer renders without it: an entry of the list that names one
+  is skipped. So `["{env.ACME_USER}", "svc-{env.USER}"]` with neither
+  variable set stops the fetch, before the secret provider or the command
+  runs, with an error naming `ACME_USER` and `USER`; before, kcx tried to log
+  in as `svc-`, which on a machine without `USER` (Windows sets `USERNAME`)
+  meant a wrong account and refused logins. `-u` still names the user. A
+  profile that relied on an unset variable rendering as nothing needs that
+  entry rewritten.
+
 ### Fixed
 
 - Windows: Ctrl-C in fzf cancels the pick, as ESC does. The console sends

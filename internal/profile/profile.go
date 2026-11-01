@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -429,18 +430,60 @@ func Render(tmpl string, v Vars) (string, error) {
 }
 
 // RenderFirst renders the list's templates in order and returns the first
-// non-empty result, or "" when none renders to anything.
+// non-empty result. An entry that names an environment variable that is unset
+// or empty is skipped, not rendered without it: "ADM{env.USER}" with no USER is
+// not a user called ADM. When entries were skipped and none rendered, the error
+// is an *UnsetError naming the variables they needed; with none skipped, the
+// result is "" and no error.
 func RenderFirst(t Template, v Vars) (string, error) {
+	var unset []string
 	for _, tmpl := range t {
 		s, err := Render(tmpl, v)
 		if err != nil {
 			return "", err
 		}
+		if names := unsetEnv(tmpl, v.Getenv); len(names) > 0 {
+			for _, n := range names {
+				if !slices.Contains(unset, n) {
+					unset = append(unset, n)
+				}
+			}
+			continue
+		}
 		if s != "" {
 			return s, nil
 		}
 	}
+	if len(unset) > 0 {
+		return "", &UnsetError{Vars: unset}
+	}
 	return "", nil
+}
+
+// unsetEnv lists the {env.VAR} names in tmpl whose value is unset or empty.
+func unsetEnv(tmpl string, getenv layout.Getenv) []string {
+	var names []string
+	for _, m := range placeholder.FindAllStringSubmatch(tmpl, -1) {
+		name, ok := strings.CutPrefix(m[1], "env.")
+		if ok && (getenv == nil || getenv(name) == "") && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// UnsetError says that no template of a list gave a value, because each that
+// could names an environment variable that is not set.
+type UnsetError struct {
+	Vars []string
+}
+
+func (e *UnsetError) Error() string {
+	n := len(e.Vars)
+	if n == 1 {
+		return e.Vars[0] + " is not set"
+	}
+	return strings.Join(e.Vars[:n-1], ", ") + " and " + e.Vars[n-1] + " are not set"
 }
 
 // Resolve computes the host and user of cluster c for a fetch: the cluster's own
@@ -465,6 +508,10 @@ func (s *Set) Resolve(c *Cluster, userOverride string, getenv layout.Getenv) (ho
 			userT = p.User
 		}
 		if user, err = RenderFirst(userT, v); err != nil {
+			var unset *UnsetError
+			if errors.As(err, &unset) {
+				return "", "", fmt.Errorf("cluster %s: user: %w; or name the user with -u", c.Name, err)
+			}
 			return "", "", fmt.Errorf("cluster %s: user: %w", c.Name, err)
 		}
 	}

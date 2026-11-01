@@ -4,6 +4,16 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.4 (2026-11-01)
+
+### Fixed
+
+- `trash = "none"` in the settings is honoured. kcx accepted the setting and
+  then moved files to the Trash anyway. Now `kcx rm` refuses, naming the
+  file, and `kcx add -f` refuses to replace an existing file, before anything
+  is written; neither moves nor deletes a file. Adding a new name works as
+  before. `kcx doctor` shows the setting with the others.
+
 ## 2.2.3 (2026-10-31)
 
 ### Added

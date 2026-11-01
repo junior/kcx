@@ -22,7 +22,8 @@ type Settings struct {
 	SecretCache bool `toml:"secret_cache"`
 	// Probe false skips the authenticated probe before a switch (5.5 of the design).
 	Probe bool `toml:"probe"`
-	// Picker is "fzf" (when on PATH and on a terminal) or "plain" (a numbered list).
+	// Picker is "fzf" (fzf when it is on PATH, else a numbered menu) or "plain"
+	// (the numbered menu, fzf or not).
 	Picker string `toml:"picker"`
 	// Trash is "auto" (the system Trash, refusing when there is none) or "none"
 	// (a refusal that names the file, never a deletion).

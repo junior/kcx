@@ -56,7 +56,8 @@ the prompt function in place, so load it after a prompt theme's own init
 ## Commands
 
 ```
-kcx                         pick a context (fzf); the top line browses your profiles
+kcx                         pick a context (fzf, or a numbered menu without it); the
+                            top line browses your profiles
 kcx NAME                    switch; fetch first when NAME is only in a profile or its
                             credentials no longer work (--refresh forces)
 kcx -  |  kcx -c            previous context  |  current context
@@ -124,6 +125,13 @@ green, yellow, blue, magenta, cyan or white; `NO_COLOR` turns that off), and a
 site is any text. In the browse, ESC steps back and q quits. `kcx profile ls`
 lists the same clusters as a table, in the same colours when its output is a
 terminal.
+
+Without fzf on `PATH`, or with `picker = "plain"` in the settings, every picker
+(the context picker and its browse, `kcx ns`, `kcx shell` and `kcx -r` without
+a name, the temp cluster wizard) is a numbered menu instead: the same rows,
+numbered, and a question read from the terminal, as fzf reads its keys. A
+number picks; Enter steps back, or cancels at the first step; q quits the
+browse; anything else asks again.
 
 ### Secret providers
 
@@ -201,12 +209,13 @@ runs its tests and a PowerShell end to end there. Its home is kubectl's:
 `%USERPROFILE%\.kube`, and `KUBECONFIG` is separated by `;`. `kcx rm` moves a
 file to the Recycle Bin. `kcx shell` and the read-only shell start `SHELL`
 when it is set, else PowerShell 7, else Windows PowerShell, else `cmd.exe`.
-Prompts for a secret or a name read the console. A fetch command is a program,
-as elsewhere (a PowerShell script runs as `powershell.exe -File SCRIPT`, by
-full command line); a secret provider may be a PowerShell script itself (see
-Secret providers). Windows has no file modes for kcx to set: your profile
-directory's permissions keep `~/.kube` private, and `kcx doctor` does not
-check modes there.
+Prompts for a secret or a name read the console, and so does the numbered menu
+that stands in for fzf when `fzf.exe` is not on `PATH`. A fetch command is a
+program, as elsewhere (a PowerShell script runs as `powershell.exe -File
+SCRIPT`, by full command line); a secret provider may be a PowerShell script
+itself (see Secret providers). Windows has no file modes for kcx to set: your
+profile directory's permissions keep `~/.kube` private, and `kcx doctor` does
+not check modes there.
 
 ## Settings
 
@@ -217,7 +226,7 @@ check modes there.
 lab_node     = false   # true: refuse permanent credentials on this machine
 secret_cache = true    # false: forget a cached secret after every fetch (shared hosts)
 probe        = true    # false: no authenticated check before switching to a profile cluster
-picker       = "fzf"   # or "plain"
+picker       = "fzf"   # or "plain": the numbered menu, fzf or not
 trash        = "auto"  # or "none"
 powershell   = "windows" # or "pwsh", or an absolute path: what runs a .ps1 secret provider
 ```

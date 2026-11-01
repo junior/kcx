@@ -364,7 +364,8 @@ func (a *App) tempPrune() error {
 const pickTemp = "+ new temp cluster (kind)"
 
 // tempWizard is the picker's "+ new temp cluster": the engine, then the config,
-// then a name. ESC goes back a step, and at the first step cancels.
+// then a name. ESC (Enter, in the numbered menu) goes back a step, and at the
+// first step cancels.
 func (a *App) tempWizard() error {
 	if _, err := lookPath("kind"); err != nil {
 		return fmt.Errorf("kind is not installed")
@@ -388,7 +389,7 @@ func (a *App) tempWizard() error {
 				}
 				lines = append(lines, c.Name+"\t"+desc)
 			}
-			engine, err = p.Pick(lines, "Engine> ", "which Docker engine runs the cluster"+sep+"ESC cancels")
+			engine, err = p.Pick(lines, "Engine> ", "which Docker engine runs the cluster", false)
 			if err != nil || engine == "" {
 				return err
 			}
@@ -398,7 +399,7 @@ func (a *App) tempWizard() error {
 			for _, pr := range temp.Presets(a.lay.Presets) {
 				lines = append(lines, pr+"\t"+filepath.Join(a.lay.Presets, pr+".yaml"))
 			}
-			cfg, err = p.Pick(lines, "Config> ", "on "+engine+sep+"ESC back")
+			cfg, err = p.Pick(lines, "Config> ", "on "+engine, true)
 			if err != nil {
 				return err
 			}

@@ -11,6 +11,11 @@ type TTY struct {
 	In, Out *os.File
 }
 
+// Read reads from the terminal and Write writes to it, so a TTY serves as an
+// io.ReadWriteCloser.
+func (t *TTY) Read(p []byte) (int, error)  { return t.In.Read(p) }
+func (t *TTY) Write(p []byte) (int, error) { return t.Out.Write(p) }
+
 // Close closes what Open opened.
 func (t *TTY) Close() error {
 	err := t.In.Close()

@@ -23,11 +23,11 @@ const (
 	pickFetch   = "+ fetch / browse the profile clusters"
 	markFetched = "\u2713" // a check mark: the cluster has its file
 	markCurrent = "*"      // the current context
-	sep         = "  |  "  // between the parts of a picker's header
+	sep         = picker.Sep
 )
 
 func (a *App) picker() picker.Picker {
-	p := picker.Picker{}
+	p := picker.Picker{Term: a.term}
 	if s, err := a.settings(); err == nil && s.Picker == "plain" {
 		p.Plain = true
 	}
@@ -51,18 +51,19 @@ func (a *App) fetched(name string) bool {
 	return err == nil
 }
 
-// pickContext offers the contexts in fzf and returns the one chosen, or "" on a
-// cancel. Without a picker it returns an error that says to name the context.
+// pickContext offers the contexts in a picker and returns the one chosen, or ""
+// on a cancel. With no one at a terminal it returns an error that says to name
+// the context.
 func (a *App) pickContext(prompt, header string) (string, error) {
 	p := a.picker()
 	if !p.Available() {
-		return "", usagef("name the context (no picker: fzf on PATH and a terminal are needed)")
+		return "", usagef("name the context (there is no terminal to pick it on)")
 	}
 	rows, err := a.contextRows()
 	if err != nil {
 		return "", err
 	}
-	return p.PickLines(rows, prompt, header+sep+markCurrent+" current"+sep+"ESC cancels")
+	return p.PickLines(rows, prompt, header+sep+markCurrent+" current", false)
 }
 
 // contextRows are the picker's rows, one per context: its name, its group (or
@@ -156,7 +157,7 @@ func (a *App) cmdPick() error {
 		top = append(top, picker.Line{Value: pickTemp, Cols: []string{pickTemp, "on any Docker engine"}})
 	}
 	rows = append(top, rows...)
-	pick, err := p.PickLines(rows, "context> ", header+sep+markCurrent+" current"+sep+"ESC cancels")
+	pick, err := p.PickLines(rows, "context> ", header+sep+markCurrent+" current", false)
 	if err != nil {
 		return err
 	}
@@ -177,8 +178,9 @@ func (a *App) cmdPick() error {
 
 // browse is the profile drill-down: group, then site (when the group spans more
 // than one), then cluster, with the fetched ones and the current one marked.
-// ESC steps back, and at the first step cancels; q quits from any step. It
-// returns the chosen cluster's name, "" on a cancel or a quit.
+// ESC (Enter, in the numbered menu) steps back, and at the first step cancels;
+// q quits from any step. It returns the chosen cluster's name, "" on a cancel
+// or a quit.
 func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 	p.Quit = true
 	current := ""
@@ -196,7 +198,7 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 		switch step {
 		case "group":
 			total, fetched := fetchedCount(set, a.fetched)
-			pick, err := p.PickLines(groupRows(set, a.fetched, a.paint), "Group> ", counts(total, fetched)+sep+"ESC cancels  q quits")
+			pick, err := p.PickLines(groupRows(set, a.fetched, a.paint), "Group> ", counts(total, fetched), false)
 			if err != nil || pick == "" {
 				return done(err)
 			}
@@ -208,7 +210,7 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 				step = "cluster"
 			}
 		case "site":
-			pick, err := p.PickLines(siteRows(set, group, a.fetched), "Site> ", set.Groups[group].Display()+sep+"ESC back  q quits")
+			pick, err := p.PickLines(siteRows(set, group, a.fetched), "Site> ", set.Groups[group].Display(), true)
 			if err != nil {
 				return done(err)
 			}
@@ -227,7 +229,7 @@ func (a *App) browse(p picker.Picker, set *profile.Set) (string, error) {
 			if shown != "" && shown != "-" {
 				crumbs += " > " + shown
 			}
-			pick, err := p.PickLines(clusterRows(set, group, site, a.fetched, current, a.paint), "Cluster> ", crumbs+sep+markFetched+" fetched  "+markCurrent+" current"+sep+"ESC back  q quits")
+			pick, err := p.PickLines(clusterRows(set, group, site, a.fetched, current, a.paint), "Cluster> ", crumbs+sep+markFetched+" fetched  "+markCurrent+" current", true)
 			if err != nil {
 				return done(err)
 			}
@@ -361,7 +363,7 @@ func clusterRows(set *profile.Set, group, site string, fetched func(string) bool
 }
 
 // pickNamespace is `kcx ns` with no argument on a terminal: the cluster's
-// namespaces in fzf, the choice set.
+// namespaces in a picker, the choice set.
 func (a *App) pickNamespace(files []string, ctx string) error {
 	p := a.picker()
 	list, err := ns.List(context.Background(), files, ctx, apiTimeout)
@@ -383,7 +385,7 @@ func (a *App) pickNamespace(files []string, ctx string) error {
 		}
 		rows = append(rows, picker.Line{Value: n, Cols: []string{n, mark}})
 	}
-	choice, err := p.PickLines(rows, "namespace> ", "namespace of "+ctx+sep+markCurrent+" current"+sep+"ESC cancels")
+	choice, err := p.PickLines(rows, "namespace> ", "namespace of "+ctx+sep+markCurrent+" current", false)
 	if errors.Is(err, picker.ErrUnavailable) || choice == "" {
 		return err
 	}

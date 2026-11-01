@@ -183,10 +183,13 @@ func (a *App) cmdDoctor(args []string) error {
 
 	// Programs.
 	for _, prog := range []string{"kubectl", "fzf"} {
-		if _, err := exec.LookPath(prog); err != nil {
-			note("%s is not on PATH", prog)
-		} else {
+		switch _, err := exec.LookPath(prog); {
+		case err == nil:
 			ok("%s found", prog)
+		case prog == "fzf":
+			note("fzf is not on PATH: the pickers are numbered menus")
+		default:
+			note("%s is not on PATH", prog)
 		}
 	}
 	if problems > 0 {

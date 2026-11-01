@@ -14,7 +14,8 @@ import (
 const usageText = `kcx - one kubeconfig file per cluster under ~/.kube, and the tools to use them.
 
 Contexts and namespaces
-  kcx                         pick a context (fzf); the top line browses the profiles
+  kcx                         pick a context (fzf, or a numbered menu without it); the
+                              top line browses the profiles
   kcx NAME [-u USER]          switch to NAME: a cluster file, a context, kind-NAME, or a
                               profile cluster, fetched first when its file is missing or
                               its credentials no longer work (--refresh: fetch regardless;

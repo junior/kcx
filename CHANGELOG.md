@@ -4,6 +4,30 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## Unreleased
+
+### Added
+
+- A numbered menu stands in for fzf. Without fzf on `PATH`, or with
+  `picker = "plain"` in the settings (which until now only turned fzf off),
+  every picker shows its rows numbered and asks on the terminal, the console
+  on Windows: `kcx` and its profile browse, `kcx ns`, `kcx shell` and `kcx -r`
+  without a name, and the temp cluster wizard. A number picks; Enter steps
+  back, or cancels at the first step; q, or the end of the input (Ctrl-D),
+  quits the browse and cancels the other pickers; anything else asks again.
+  Before, `kcx` without fzf printed the list of contexts (so neither the
+  browse nor the wizard could be reached), `kcx shell` and `kcx -r` without
+  a name asked for one, and `kcx ns` printed the namespaces. `kcx doctor` now
+  says the pickers are menus where fzf is missing.
+
+### Fixed
+
+- Windows: Ctrl-C in fzf cancels the pick, as ESC does. The console sends
+  Ctrl-C to every program on it, kcx included, which ended there with
+  Windows' Ctrl-C status before fzf's own exit could say the pick was
+  cancelled. kcx now waits for fzf, and also takes that status from fzf as
+  a cancel.
+
 ## 2.2.2 (2026-10-29)
 
 ### Added

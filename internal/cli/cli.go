@@ -71,6 +71,8 @@ type App struct {
 	lay    layout.Layout
 	cfg    *config.Settings // loaded on first use
 	set    *profile.Set     // loaded on first use
+	// term stands in for the terminal the numbered menu talks on, in tests.
+	term func() (io.ReadWriteCloser, error)
 }
 
 // Main runs kcx with args and returns the exit status.

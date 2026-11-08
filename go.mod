@@ -8,8 +8,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
 	sigs.k8s.io/yaml v1.6.0
 )
 

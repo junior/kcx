@@ -17,6 +17,31 @@ jobs:
       id-token: write # keyless cosign signatures and the attestations
       attestations: write
     steps:
+      # The macOS binaries are signed and notarised with all five Apple secrets,
+      # and released unsigned with none. Only some is a mistake, and a release
+      # cannot be changed once it is out: stop here, before anything is built.
+      # The step prints names, never values.
+      - name: Apple secrets, all five or none
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          present=""
+          missing=""
+          for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_ISSUER_ID MACOS_NOTARY_KEY_ID MACOS_NOTARY_KEY; do
+            if [ -n "${!name}" ]; then present="$present $name"; else missing="$missing $name"; fi
+          done
+          if [ -z "$present" ]; then
+            echo "No Apple secrets: the macOS binaries will not be signed."
+          elif [ -z "$missing" ]; then
+            echo "All five Apple secrets are set: the macOS binaries will be signed and notarised."
+          else
+            echo "::error::Only some Apple secrets are set. Set:${present}. Missing:${missing}. Set all five in the release environment, or remove them all to release unsigned."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -41,8 +66,9 @@ jobs:
           args: release --clean --release-notes /tmp/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Apple code signing and notarisation of the macOS binaries. Absent secrets
-          # skip the step; the release is still built and attested.
+          # Apple code signing and notarisation of the macOS binaries: all five
+          # secrets, or none, which leaves them unsigned; the release is still
+          # built and attested. The first step stops a release with only some.
           MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
           MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}

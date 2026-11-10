@@ -4,6 +4,12 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.5-rc.1 (2026-11-09)
+
+The candidate for 2.2.5, with client-go and apimachinery 0.37.2. Its release
+signs and notarises the macOS binaries only when all five Apple secrets are
+set, and stops at its first step when only some of them are.
+
 ## 2.2.4 (2026-11-01)
 
 ### Fixed

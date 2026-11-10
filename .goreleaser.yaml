@@ -70,7 +70,14 @@ signs:
 
 notarize:
   macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+    # On only when the certificate and the three notary values are all set:
+    # with the certificate alone, GoReleaser would sign the binaries and skip
+    # notarisation without an error. A missing or wrong password stops the
+    # release when the certificate is read. release.yml also stops a release
+    # that has only some of the five Apple secrets.
+    - enabled: >-
+        {{ and (isEnvSet "MACOS_SIGN_P12") (isEnvSet "MACOS_NOTARY_ISSUER_ID")
+        (isEnvSet "MACOS_NOTARY_KEY_ID") (isEnvSet "MACOS_NOTARY_KEY") }}
       ids: [kcx, kcx-universal]
       sign:
         certificate: "{{ .Env.MACOS_SIGN_P12 }}"

@@ -199,3 +199,68 @@ func TestPickMenu(t *testing.T) {
 		t.Fatalf("Enter cancels, nothing switched:\n%s", got)
 	}
 }
+
+// The context list: the profile clusters first, in the browse's order (group,
+// then site as first listed, then cluster as listed), whatever their files are
+// called; every other context after them, in file order.
+func TestContextRows(t *testing.T) {
+	e, l := fixture(t) // alpha and beta, in no profile
+	const prof = `
+[provider.p]
+command = ["p", "{out}"]
+[group.production]
+label    = "Production"
+provider = "p"
+readonly = true
+[group.non-production]
+provider = "p"
+[cluster.a2]
+group   = "production"
+site    = "Austin"
+aliases = ["main"]
+[cluster.a10]
+group = "production"
+site  = "Austin"
+[cluster.b1]
+group = "production"
+site  = "Atlanta"
+[cluster.a2-np]
+group = "non-production"
+site  = "Austin"
+`
+	if err := os.MkdirAll(l.Profiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.Profiles, "p.toml"), []byte(prof), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// By file name these sort a10, a2-np, a2, alpha, b1, beta, main: '-' sorts
+	// before '.', and 1 before 2. main.yaml is a2's under its alias.
+	for _, n := range []string{"b1", "a2-np", "a2", "a10", "main"} {
+		writeKubeconfig(t, l.PermFile(n), n, n, n, "https://"+n+".example.test:6443", "")
+	}
+	// The state file holds the current context and one context another tool wrote.
+	writeKubeconfig(t, l.State, "inbox", "inbox", "inbox", "https://inbox.example.test:6443", "a10")
+	a := &App{getenv: env{"HOME": e["HOME"], "NO_COLOR": "1"}.get, lay: l}
+	rows, err := a.contextRows()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.Value+"="+strings.Join(r.Cols, "|"))
+	}
+	want := []string{
+		"a2=a2|Production, read-only|Austin|",
+		"main=main|Production, read-only|Austin|",
+		"a10=a10|Production, read-only|Austin|*",
+		"b1=b1|Production, read-only|Atlanta|",
+		"a2-np=a2-np|non-production|Austin|",
+		"inbox=inbox|(~/.kube/config (written by another tool))||",
+		"alpha=alpha|(configs)||",
+		"beta=beta|(configs)||",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("contextRows:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

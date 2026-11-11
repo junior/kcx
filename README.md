@@ -123,7 +123,11 @@ CLI's kubeconfig with the names the cloud gave it. The file is always
 `kcx` alone opens the picker over your contexts, and its top line browses the
 profiles the way they are organised: group, then site, then cluster, in the
 order the files list them (file by file, as their names sort), with a check
-mark on the clusters that have a file and a star on the current one. A group's
+mark on the clusters that have a file and a star on the current one. The
+contexts below the top line come in the same order: the profile clusters that
+have a file, group by group and site by site, then every other context, file
+by file as `KUBECONFIG` lists them. `kcx shell` and `kcx -r` without a name
+offer the same list. A group's
 `label` is what the picker shows for it, its `color` paints its rows (red,
 green, yellow, blue, magenta, cyan or white; `NO_COLOR` turns that off), and a
 site is any text. In the browse, ESC steps back and q quits. `kcx profile ls`

@@ -4,6 +4,28 @@ All notable changes to kcx. The format follows Keep a Changelog; versions
 follow Semantic Versioning. kcx 1.0.0 was a bash script shipped in the
 author's dotfiles; 2.0.0 is its rewrite in Go, in this repository.
 
+## 2.2.5 (2026-11-11)
+
+### Changed
+
+- The picker lists the profile clusters first, in the order the browse shows
+  them: group by group, site by site within a group, and cluster by cluster
+  within a site, as the profiles list them. Before, it listed the contexts
+  file by file as the file names sort, so the clusters of different groups
+  were mixed (`a2-np.yaml` sorts before `a2.yaml`). Every other context
+  follows, file by file as `KUBECONFIG` lists them. `kcx shell` and `kcx -r`
+  without a name offer the same list.
+- client-go and apimachinery 0.37.2.
+
+### Security
+
+- Go 1.27.4, for GO-2026-6859: an HTTP/1 server that uses MaxBytesReader can
+  crash. kcx never calls MaxBytesReader, though govulncheck traces paths into
+  the affected code.
+- The release signs and notarises the macOS binaries only when all five
+  Apple secrets are set, and stops at its first step when only some of them
+  are.
+
 ## 2.2.5-rc.1 (2026-11-09)
 
 The candidate for 2.2.5, with client-go and apimachinery 0.37.2. Its release

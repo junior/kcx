@@ -68,7 +68,10 @@ func (a *App) pickContext(prompt, header string) (string, error) {
 
 // contextRows are the picker's rows, one per context: its name, its group (or
 // where its file lives), its site, and the current marker. A context that is a
-// profile cluster's takes its group's colour and label.
+// profile cluster's takes its group's colour and label, and comes first, in the
+// order the browse shows the clusters (group, then site, then cluster, as the
+// profiles list them), whatever its file is called; every other context follows,
+// file by file as KUBECONFIG lists them.
 func (a *App) contextRows() ([]picker.Line, error) {
 	s := a.store()
 	cur, err := s.Current()
@@ -76,10 +79,15 @@ func (a *App) contextRows() ([]picker.Line, error) {
 		return nil, err
 	}
 	var set *profile.Set
+	var rank map[string]int
 	if ps, err := a.profiles(); err == nil {
-		set = ps
+		set, rank = ps, profileRank(ps)
 	}
-	var rows []picker.Line
+	type row struct {
+		line  picker.Line
+		order int
+	}
+	var rows []row
 	for _, f := range s.Files {
 		if f == s.Shadow {
 			continue // a kcx shell's or a run's copies of the contexts below
@@ -97,7 +105,7 @@ func (a *App) contextRows() ([]picker.Line, error) {
 		}
 		sort.Strings(names)
 		for _, n := range names {
-			shown, place, site := n, "("+a.lay.Where(f)+")", ""
+			shown, place, site, order := n, "("+a.lay.Where(f)+")", "", len(rank)
 			if set != nil {
 				if c, ok := set.Lookup(clusterNameOf(a.lay, f, n, len(names))); ok {
 					g := set.Groups[c.Group]
@@ -107,16 +115,45 @@ func (a *App) contextRows() ([]picker.Line, error) {
 						place += ", read-only"
 					}
 					site = c.Site
+					if r, ok := rank[c.Name]; ok { // c.Name: an alias takes its cluster's place
+						order = r
+					}
 				}
 			}
 			mark := ""
 			if n == cur {
 				mark = markCurrent
 			}
-			rows = append(rows, picker.Line{Value: n, Cols: []string{shown, place, site, mark}})
+			rows = append(rows, row{picker.Line{Value: n, Cols: []string{shown, place, site, mark}}, order})
 		}
 	}
-	return rows, nil
+	// Stable, so the contexts of one cluster, and those of no profile cluster,
+	// keep their file order.
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].order < rows[j].order })
+	lines := make([]picker.Line, len(rows))
+	for i, r := range rows {
+		lines[i] = r.line
+	}
+	return lines, nil
+}
+
+// profileRank numbers the profile clusters in the order the browse shows them:
+// group by group, site by site within a group, and cluster by cluster within a
+// site, each in the order the profiles list them.
+func profileRank(set *profile.Set) map[string]int {
+	rank := map[string]int{}
+	i := 0
+	for _, g := range set.GroupNames() {
+		for _, site := range sitesOf(set, g) {
+			for _, n := range set.InGroup(g) {
+				if siteOf(set.Clusters[n]) == site {
+					rank[n] = i
+					i++
+				}
+			}
+		}
+	}
+	return rank
 }
 
 // clusterNameOf is the profile name a context may stand for: the file's name
